@@ -114,12 +114,12 @@ module.exports = class AuthHandler extends BaseHandler {
                     const possibleEmailEntries = [ 'contact', 'eMail', 'mail' ];
                     possibleEmailEntries.forEach(key => {
                         if (!nullOrEmpty(adminCWhois[key]) && typeof adminCWhois[key] === 'string') {
-                            const matches = adminCWhois[key].trim().match(MAIL_REGEX);
+                            const matches = adminCWhois[key].trim().toLowerCase().match(MAIL_REGEX);
                             if (matches) matches.forEach(mail => {
                                 addAuthMethods({
                                     id: availableAuthMethods.length,
                                     type: 'e-mail',
-                                    data:  mail.toLowerCase()
+                                    data:  mail
                                 });
                             });
                         }
