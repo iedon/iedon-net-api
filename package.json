@@ -1,0 +1,30 @@
+{
+  "name": "iedon-peerapi",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node bin/www",
+    "dev": "nodemon bin/www",
+    "prod": "pm2 start bin/www",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "bcrypt": "^5.0.1",
+    "debug": "^4.3.3",
+    "jsonwebtoken": "^8.5.1",
+    "koa": "^2.13.4",
+    "koa-bodyparser": "^4.3.0",
+    "koa-onerror": "^4.1.0",
+    "koa-router": "^10.1.1",
+    "log4js": "^6.4.0",
+    "mysql2": "^2.3.3",
+    "nodemailer": "^6.7.2",
+    "nodemon": "^2.0.15",
+    "openpgp": "^5.0.1",
+    "sequelize": "^7.0.0-alpha.4",
+    "sqlite3": "^5.0.2",
+    "sshpk": "^1.17.0",
+    "urllib": "^2.38.0",
+    "whois-json": "^2.0.4"
+  }
+}
