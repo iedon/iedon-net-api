@@ -60,7 +60,9 @@ module.exports = class SessionHandler extends BaseHandler {
         if (
             (nullOrEmpty(_ipv4) && nullOrEmpty(_ipv6) && nullOrEmpty(_ipv6_link_local)) ||
             nullOrEmpty(_type) || typeof _type !== 'string' || nullOrEmpty(_data) ||
-            (nullOrEmpty(_endpoint) && nullOrEmpty(_credential)) ||
+            // Uncomment bellow to disallow empty endpoit/credential
+            // nullOrEmpty(_endpoint) ||
+            // nullOrEmpty(_credential)) ||
             !Array.isArray(_extensions) || _extensions.some(e => typeof e !== 'string')
         ) {
             return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
@@ -157,10 +159,11 @@ module.exports = class SessionHandler extends BaseHandler {
 
                     if (mySessionCount > 0xFF) throw new Error(`Too many sessions for peer "${ctx.state.asn}" on router "${routerUuid}"`);
 
-                    const ifname = `dn${Number(ctx.state.asn).toString(36)}${mySessionCount.toString(16)}`;
+                    const peerAsn = isAdmin ? _asn : Number(ctx.state.asn)
+                    const ifname = `dn${peerAsn.toString(36)}${mySessionCount.toString(16)}`;
                     await ctx.models.bgpSessions.create({
                         router: routerUuid,
-                        asn: isAdmin ? _asn : Number(ctx.state.asn),
+                        asn: peerAsn,
                         status: routerQuery.dataValues.auto_peering ? 1 : -1,
                         ipv4: _ipv4 || null,
                         ipv6: _ipv6 || null,
@@ -177,7 +180,7 @@ module.exports = class SessionHandler extends BaseHandler {
                         const response = await ctx.app.fetch.post(url, {
                             action: 'add',
                             router: routerUuid,
-                            asn: isAdmin ? _asn : Number(ctx.state.asn),
+                            asn: peerAsn,
                             ipv4: _ipv4 || null,
                             ipv6: _ipv6 || null,
                             ipv6LinkLocal: _ipv6_link_local || null,
@@ -188,7 +191,7 @@ module.exports = class SessionHandler extends BaseHandler {
                             credential: _credential || null,
                             data: _data
                         }, 'json');
-    
+
                         if (!response || response.status !== 200 || nullOrEmpty(response.data) || !response.data.success) {
                             throw new Error(`Calling router's callback failed: ${response ? `HTTP Status ${response.status}` : 'Null response'}`);
                         }
