@@ -74,14 +74,13 @@ const initMiddlewares = () => {
   const routes = require('./routes');
   app.use(routes.routes(), routes.allowedMethods());
 
+  app.use(require('koa-body-parser')());
   if (settings.acorle.enabled) {
     // Register all routes as microservice to acorle
     const { AcorleService } = require('./acorle-sdk/acorleKoa');
     const services = [];
     routes.routes().router.stack.map(r => services.push(new AcorleService(r.path.replace('/', ''), `${settings.acorle.localUrl}${r.path}`, `PeerAPI ${r.path.replace('/', '')}`, false)));
     app.acorle.registerServices(services);
-  } else {
-    app.use(require('koa-body-parser')());
   }
 }
 

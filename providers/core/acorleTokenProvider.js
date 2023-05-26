@@ -7,10 +7,10 @@ module.exports = class AcorleTokenProvider extends DefaultTokenProvider {
 
     async generateToken(state) {
         try {
-            return await this.app.acorle.requestPeerService(this.tokenSettings.acorle.serviceKey, {
+            return JSON.parse(await this.app.acorle.requestPeerService(this.tokenSettings.acorle.serviceKey, JSON.stringify({
                 action: 'generate',
                 state
-            });
+            }), 'POST', { 'Content-Type': 'application/json' }));
         } catch (error) {
             if (this.tokenSettings.logging) this.logger.error(error);
             return null;
@@ -19,10 +19,10 @@ module.exports = class AcorleTokenProvider extends DefaultTokenProvider {
 
     async verify(token) {
         try {
-            return JSON.parse(await this.app.acorle.requestPeerService(this.tokenSettings.acorle.serviceKey, {
+            return JSON.parse(await this.app.acorle.requestPeerService(this.tokenSettings.acorle.serviceKey, JSON.stringify({
                 action: 'verify',
                 token
-            }));
+            }), 'POST', { 'Content-Type': 'application/json' }));
         } catch (error) {
             if (this.tokenSettings.logging) this.logger.error(error);
             return null;

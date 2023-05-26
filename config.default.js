@@ -210,6 +210,6 @@ module.exports = {
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'X-PeerAPI-Version, Content-Type',
         'Access-Control-Max-Age': '86400',
-        'X-Powered-By': 'PHP/8.1.2'
+        'X-Powered-By': 'PHP/8.2.6'
     }
 }
