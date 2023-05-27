@@ -8,6 +8,7 @@
 const package = require('./package.json');
 const app = new (require('koa'))();
 require('koa-onerror')(app);
+app.use(require('koa-bodyparser')());
 
 let settings = require('./config');
 
@@ -74,7 +75,6 @@ const initMiddlewares = () => {
   const routes = require('./routes');
   app.use(routes.routes(), routes.allowedMethods());
 
-  app.use(require('koa-body-parser')());
   if (settings.acorle.enabled) {
     // Register all routes as microservice to acorle
     const { AcorleService } = require('./acorle-sdk/acorleKoa');
