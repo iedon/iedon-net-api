@@ -1,4 +1,4 @@
-module.exports = class DefaultMailProvider {
+export class DefaultMailProvider {
     constructor(app, mailSettings) {
         this.app = app;
         this.mailSettings = mailSettings;

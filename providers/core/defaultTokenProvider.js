@@ -1,6 +1,6 @@
-const { signAsync, verifyAsync } = require("../../common/helper");
+import { signAsync, verifyAsync } from "../../common/helper.js";
 
-module.exports = class DefaultTokenProvider {
+export class DefaultTokenProvider {
     constructor(app, tokenSettings) {
         this.app = app;
         this.tokenSettings = tokenSettings;

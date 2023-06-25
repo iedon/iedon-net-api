@@ -1,4 +1,4 @@
-const BaseHandler = require("./baseHandler");
+import { BaseHandler } from "./base.js";
 
 /*
     "REQUEST": {
@@ -9,7 +9,7 @@ const BaseHandler = require("./baseHandler");
 
 */
 
-module.exports = class PingHandler extends BaseHandler {
+export class PingHandler extends BaseHandler {
 
     constructor(router) {
         super(router);

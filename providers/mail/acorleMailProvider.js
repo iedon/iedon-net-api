@@ -1,6 +1,6 @@
-const DefaultMailProvider = require('./defaultMailProvider')
+import { DefaultMailProvider } from './defaultMailProvider';
 
-module.exports = class AcorleMailProvider extends DefaultMailProvider {
+export class AcorleMailProvider extends DefaultMailProvider {
     async send(to, subject, content) {
         try {
             const result = JSON.parse(await this.app.acorle.requestPeerService(this.mailSettings.acorle.serviceKey, JSON.stringify({

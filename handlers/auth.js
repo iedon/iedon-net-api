@@ -1,7 +1,8 @@
-const BaseHandler = require("./baseHandler");
-const { nullOrEmpty, signAsync, verifyAsync, getRandomCode, bcryptCompare, ASN_MIN, ASN_MAX, MAIL_REGEX } = require("../common/helper");
-const openpgp = require('openpgp');
-const sshpk = require('sshpk');
+import { BaseHandler } from "./base.js";
+import { nullOrEmpty, signAsync, verifyAsync, getRandomCode, bcryptCompare, ASN_MIN, ASN_MAX, MAIL_REGEX } from "../common/helper.js";
+
+import openpgp from 'openpgp';
+import sshpk from 'sshpk';
 
 /*
     "REQUEST": {
@@ -54,7 +55,7 @@ const sshpk = require('sshpk');
     }
 */
 
-module.exports = class AuthHandler extends BaseHandler {
+export class AuthHandler extends BaseHandler {
 
     constructor(router) {
         super(router);

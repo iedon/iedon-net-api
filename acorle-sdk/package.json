@@ -3,8 +3,8 @@
     "version": "2.0.0",
     "author": "iEdon",
     "private": true,
+    "type": "module",
     "dependencies": {
-        "jsonwebtoken": "^9.0.0",
-        "urllib": "^3.16.1"
+        "jsonwebtoken": "^9.0.0"
     }
 }

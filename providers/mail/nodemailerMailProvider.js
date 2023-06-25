@@ -1,10 +1,10 @@
-const DefaultMailProvider = require('./defaultMailProvider')
-const nodemailer = require('nodemailer');
+import { DefaultMailProvider } from './defaultMailProvider.js';
+import { createTransport } from 'nodemailer';
 
-module.exports = class NodemailMailProvider extends DefaultMailProvider {
+export class NodemailerMailProvider extends DefaultMailProvider {
     async send(to, subject, content) {
         return new Promise((resolve, _) => {
-            nodemailer.createTransport(this.mailSettings.nodemailer).sendMail({
+            createTransport(this.mailSettings.nodemailer).sendMail({
                 from: this.mailSettings.senderEmailAddress,
                 to,
                 subject,

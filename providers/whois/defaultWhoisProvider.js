@@ -1,6 +1,6 @@
-const whois = require('whois-json');
+import whois from 'whois-json';
 
-module.exports = class DefaultWhoisProvider {
+export class DefaultWhoisProvider {
     constructor(app, whoisSettings) {
         this.app = app;
         this.whoisSettings = whoisSettings;

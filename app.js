@@ -5,57 +5,69 @@
  * ===========================
  */
 
-const package = require('./package.json');
-const app = new (require('koa'))();
-require('koa-onerror')(app);
-app.use(require('koa-bodyparser')());
+import pkg from './package.json' assert { type: 'json' };
+import localSettings from './config.js';
 
-let settings = require('./config');
+import { useLogger } from './providers/logger/logger.js';
+import { useMail } from './providers/mail/mail.js';
+import { useWhois } from './providers/whois/whois.js';
+import { useFetch } from './providers/fetch/fetch.js';
+import { useDbContext } from './db/dbContext.js';
+import { useCore } from './providers/core/core.js';
+import { useRouter } from './routes.js';
 
-const { logger } = require('./providers/logger/logger');
-const { mail } = require('./providers/mail/mail');
-const { whois } = require('./providers/whois/whois');
-const { fetch } = require('./providers/fetch/fetch');
-const { dbContext } = require('./db/dbContext');
-const { core } = require('./providers/core/core');
+import Koa from 'koa'
+import KoaBodyParser from 'koa-bodyparser'
 
-app.settings = settings;
-app.use(logger(app, settings.loggerSettings));
-const appLogger = app.logger.getLogger('app');
 
-const initAcorle = async () => {
+const app = new Koa();
+app.settings = localSettings;
+app.use(KoaBodyParser());
+
+
+(async () => {
+
+  await useLogger(app, localSettings.loggerSettings);
+  app.logger.getLogger('app').info(`${pkg.name}/${pkg.version} started.`);
+
+  if (localSettings.acorle.enabled) await initAcorle(app);
+
+  useDbContext(app, app.settings.dbSettings);
+  useMail(app, app.settings.mailSettings);
+  useWhois(app, app.settings.whoisSettings);
+  useFetch(app, app.settings.fetchSettings);
+  useCore(app, app.settings.tokenSettings);
+  useRouter(app);
+
+})();
+
+
+const initAcorle = async (app) => {
+  const appLogger = app.logger.getLogger('app');
   const acorleLogger = app.logger.getLogger('acorle');
 
-  const { acorleKoa } = require('./acorle-sdk/acorleKoa');
-  app.use(acorleKoa(app,
-    settings.acorle.centerServerUrl,
-    settings.acorle.zone,
-    settings.acorle.secret,
-    settings.acorle.regIntervalSeconds,
-    (level, log) => {
-      switch (level) {
-        case 'warn': return acorleLogger.warn(log);
-        case 'error': return acorleLogger.error(log);
-        case 'debug': return acorleLogger.debug(log);
-        case 'trace': return acorleLogger.trace(log);
-        case 'info': return acorleLogger.info(log);
-        default: case 'log': return acorleLogger.log(log);
-      }
-    }
+  const Acorle = await import('./acorle-sdk/acorleKoa.js');
+  app.use(Acorle.acorleKoa(app,
+    localSettings.acorle.centerServerUrl,
+    localSettings.acorle.zone,
+    localSettings.acorle.secret,
+    localSettings.acorle.regIntervalSeconds,
+    (level, log) => acorleLogger[level](log)
   ));
 
-  if (settings.acorle.retriveConfigFromCenterServer) {
-    appLogger.info(`[acorle.retriveConfigFromCenterServer] is ON. Retriving configuration with key \"${settings.acorle.configKey}\" from center server...`);
-    const config = await app.acorle.getConfig(settings.acorle.configKey);
+  if (localSettings.acorle.retriveConfigFromCenterServer) {
+    appLogger.info(`[acorle.retriveConfigFromCenterServer] is ON. Retriving configuration with key \"${localSettings.acorle.configKey}\" from center server...`);
+    const config = await app.acorle.getConfig(localSettings.acorle.configKey);
     if (config && config.context) {
       try {
         const newSettings = {
-          loggerSettings: settings.loggerSettings,
-          acorle: settings.acorle
+          listenPort: localSettings.listenPort,
+          loggerSettings: localSettings.loggerSettings,
+          acorle: localSettings.acorle,
+          handlers: localSettings.handlers
         };
         Object.assign(newSettings, JSON.parse(config.context));
-        settings = newSettings;
-        app.settings = settings;
+        app.settings = newSettings;
       } catch (error) {
         appLogger.error('Failed to parse / malformed configuration retrived from center server. Continuing with local file.');
       }
@@ -63,31 +75,17 @@ const initAcorle = async () => {
       appLogger.error('Failed to retrive configuration from center server. Continuing with local file.');
     }
   }
-}
 
-const initMiddlewares = () => {
-  app.use(dbContext(app, settings.dbSettings));
-  app.use(mail(app, settings.mailSettings));
-  app.use(whois(app, settings.whoisSettings));
-  app.use(fetch(app, settings.fetchSettings));
-  app.use(core(app, settings.tokenSettings));
-
-  const routes = require('./routes');
-  app.use(routes.routes(), routes.allowedMethods());
-
-  if (settings.acorle.enabled) {
-    // Register all routes as microservice to acorle
-    const { AcorleService } = require('./acorle-sdk/acorleKoa');
-    const services = [];
-    routes.routes().router.stack.map(r => services.push(new AcorleService(r.path.replace('/', ''), `${settings.acorle.localUrl}${r.path}`, `PeerAPI ${r.path.replace('/', '')}`, false)));
-    app.acorle.registerServices(services);
+  if (localSettings.acorle.enabled) {
+    // Register as microservice to acorle
+    app.acorle.registerServices([
+      new Acorle.AcorleService(
+        localSettings.acorle.serviceKey,
+        localSettings.acorle.localUrl,
+        localSettings.acorle.serviceName, false)
+    ]);
   }
 }
 
-(async () => {
-  appLogger.info(`${package.name}/${package.version} started.`);
-  if (settings.acorle.enabled) await initAcorle();
-  initMiddlewares();
-})();
 
-module.exports = app;
+export default app;

@@ -1,6 +1,6 @@
-const { makeResponse, RESPONSE_CODE } = require("../common/packet");
+import { makeResponse, RESPONSE_CODE } from "../common/packet.js";
 
-module.exports = class BaseHandler {
+export class BaseHandler {
     constructor(router) {
         this.router = router;
         this.makeResponse = makeResponse;

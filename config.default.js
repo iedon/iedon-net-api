@@ -5,7 +5,11 @@
  * ===========================
  */
 
-module.exports = {
+export default {
+
+    listenPort: 3000,
+
+    handlers: [ 'admin', 'auth', 'list', 'ping', 'session', 'settings' ],
 
     loggerSettings: {
         provider: 'log4js',
@@ -94,14 +98,6 @@ module.exports = {
         }
     },
 
-    authHandler: {
-        stateSignSecret: '__DEMO__STATE_SIGN_SECRET__',
-        stateSignOptions: {
-            algorithm: 'HS256',
-            expiresIn: '10m'    // where sign-in state(via mail, pgp, ssh) expires
-        }
-    },
-
     // Integration with acorle microservice
     acorle: {
         enabled: false,
@@ -112,10 +108,20 @@ module.exports = {
         localUrl: 'http://',
         // To configure which configuration we will use, from center server via acorle, or configuration presented below
         retriveConfigFromCenterServer: true,
-        configKey: 'peerapi_config'
+        configKey: 'peerapi_config',
+        serviceKey: 'peerapi',
+        serviceName: 'iEdon PeerAPI'
     },
 
     // ** The following configutations can be retrived via acorle **
+    authHandler: {
+        stateSignSecret: '__DEMO__STATE_SIGN_SECRET__',
+        stateSignOptions: {
+            algorithm: 'HS256',
+            expiresIn: '10m'    // where sign-in state(via mail, pgp, ssh) expires
+        }
+    },
+
     dbSettings: {
         dialect: 'mysql', /* sqlite */
         storage: '', /* for sqlite */
@@ -173,10 +179,12 @@ module.exports = {
     },
 
     fetchSettings: {
-        provider: 'default',    // default provider is using urllib package and takes urllib configuration section bellow
+        provider: 'default',    // default provider is using urllib package and takes fetch configuration section bellow
         logging: true,
-        urllib: {
+        fetch: {
             options: {
+                timeout: 10000,
+                cache: 'no-cache',
                 headers: {
                     'User-Agent': 'iEdon-PeerAPI'
                 },

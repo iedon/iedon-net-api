@@ -1,5 +1,7 @@
-const { DataTypes } = require('sequelize');
-module.exports = sequelize => sequelize.define('bgp_sessions', {
+import sequelize from 'sequelize';
+const { DataTypes } = sequelize;
+
+export const initModel = sequelize => sequelize.define('bgp_sessions', {
     uuid: {
         field: 'uuid',
         primaryKey: true,

@@ -1,5 +1,5 @@
-const { nullOrEmpty } = require("../common/helper");
-const BaseHandler = require("./baseHandler");
+import { BaseHandler } from "./base.js";
+import { nullOrEmpty } from "../common/helper.js";
 
 /*
     "REQUEST": {
@@ -37,7 +37,7 @@ const BaseHandler = require("./baseHandler");
 
 */
 
-module.exports = class ListHandler extends BaseHandler {
+export class ListHandler extends BaseHandler {
 
     constructor(router) {
         super(router);

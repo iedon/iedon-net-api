@@ -1,7 +1,7 @@
-const BaseHandler = require("./baseHandler");
-const { nullOrEmpty, bcryptGenSalt, bcryptGenHash } = require("../common/helper");
+import { BaseHandler } from "./base.js";
+import { nullOrEmpty, bcryptGenSalt, bcryptGenHash } from "../common/helper.js";
 
-module.exports = class SettingsHandler extends BaseHandler {
+export class SettingsHandler extends BaseHandler {
 
     constructor(router) {
         super(router);

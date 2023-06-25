@@ -1,4 +1,4 @@
-const RESPONSE_CODE = {
+export const RESPONSE_CODE = {
     OK: 0,
     SERVER_ERROR: 1,
     UNAUTHORIZED: 2,
@@ -8,9 +8,7 @@ const RESPONSE_CODE = {
     ROUTER_NOT_AVAILABLE: 6
 };
 
-exports.RESPONSE_CODE = RESPONSE_CODE;
-
-exports.makeResponse = (ctx, code, data) => {
+export function makeResponse(ctx, code, data) {
     let message = 'ok';
     switch (code) {
         default: case RESPONSE_CODE.OK: message = 'ok'; break;
@@ -27,4 +25,4 @@ exports.makeResponse = (ctx, code, data) => {
         message,
         data: data || ''
     };
-};
+}

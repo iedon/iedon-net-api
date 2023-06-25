@@ -1,6 +1,6 @@
-const DefaultTokenProvider = require('./defaultTokenProvider')
+import { DefaultTokenProvider } from './defaultTokenProvider';
 
-module.exports = class AcorleTokenProvider extends DefaultTokenProvider {
+export default class AcorleTokenProvider extends DefaultTokenProvider {
     constructor(app, tokenSettings) {
         super(app, tokenSettings);
     }

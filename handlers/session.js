@@ -1,5 +1,5 @@
-const BaseHandler = require("./baseHandler");
-const { nullOrEmpty, IPV4_REGEX, IPV6_REGEX, ASN_MAX, ASN_MIN } = require("../common/helper");
+import { BaseHandler } from "./base.js";
+import { nullOrEmpty, IPV4_REGEX, IPV6_REGEX, ASN_MAX, ASN_MIN } from "../common/helper.js";
 
 /*
     "REQUEST": {
@@ -25,7 +25,7 @@ const { nullOrEmpty, IPV4_REGEX, IPV6_REGEX, ASN_MAX, ASN_MIN } = require("../co
 
 // WARNING: Possible concurrency problems in this class
 // TODO: Improve: External I/O Request in Transaction
-module.exports = class SessionHandler extends BaseHandler {
+export class SessionHandler extends BaseHandler {
 
     constructor(router) {
         super(router);

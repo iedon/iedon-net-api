@@ -1,9 +1,9 @@
-const { nullOrEmpty, ASN_MIN, ASN_MAX } = require("../common/helper");
-const BaseHandler = require("./baseHandler");
+import { BaseHandler } from "./base.js";
+import { nullOrEmpty, ASN_MIN, ASN_MAX } from "../common/helper.js";
 
 // WARNING: Possible concurrency problems in this class
 // TODO: Improve: External I/O Request in Transaction
-module.exports = class AdminHandler extends BaseHandler {
+export class AdminHandler extends BaseHandler {
 
     constructor(router) {
         super(router);
@@ -19,21 +19,7 @@ module.exports = class AdminHandler extends BaseHandler {
             }
 
             const action = ctx.request.body.action;
-            switch (action) {
-                case 'setPost': return await this.setPost(ctx);
-                case 'deletePost': return await this.deletePost(ctx);
-                case 'enumRouters': return await this.enumRouters(ctx);
-                case 'setRouter': return await this.setRouter(ctx);
-                case 'deleteRouter': return await this.deleteRouter(ctx);
-                case 'config': return await this.config(ctx);
-                case 'enumSessions': return await this.enumSessions(ctx);
-                case 'approveSession': return await this.approveSession(ctx);
-                case 'enableSession': return await this.enableSession(ctx);
-                case 'disableSession': return await this.disableSession(ctx);
-                case 'deleteSession': return await this.deleteSession(ctx);
-                case 'querySession': return await this.querySession(ctx);
-                default: return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
-            }
+            return this[action] ? await this[action](ctx) : this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
         });
     }
 

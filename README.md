@@ -33,5 +33,5 @@ npm run dev
 
 ```bash
 npm install -g pm2
-pm2 start
+npm run prod
 ```

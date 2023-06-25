@@ -1,7 +1,6 @@
 'use strict';
 
-const urllib = require('urllib');
-const jwt = require('jsonwebtoken');
+import jwt from 'jsonwebtoken';
 const jwtSignAsync = (obj, secret, options) => new Promise((resolve, reject) => 
     jwt.sign(obj, secret, options, (error, token) => {
         if (error) {
@@ -12,7 +11,7 @@ const jwtSignAsync = (obj, secret, options) => new Promise((resolve, reject) =>
     })
 );
 
-const ResponseCodeType = {
+export const ResponseCodeType = {
   OK: 0,
   HTTP_EXCEPTION: 1,
   SERVER_EXCEPTION: 1000,
@@ -47,11 +46,24 @@ const AcorleFieldEnum = {
   CONFIG: 'config'
 }
 
-const ANTI_REPLAY_ALLOW_SECONDS_RANGE = 600;
 const DEFAULT_REG_INTERVAL_SECONDS = 30;
 const DEFAULT_CENTER_SERVER_URL = 'http://api.contoso.com';
 
-const defaultHttpRequestFunc = async (url, options) => await urllib.request(url, options);
+const defaultHttpRequestFunc = async (url, options={}) => {
+  const { timeout = 10000 } = options;
+  
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+
+  const response = await fetch(url, {
+    ...options,
+    signal: controller.signal  
+  });
+  clearTimeout(id);
+
+  return response;
+};
+
 const defaultLogFunc = (level, log) => {
   switch (level) {
     case 'warn': return console.warn(log);
@@ -63,7 +75,7 @@ const defaultLogFunc = (level, log) => {
   }
 }
 
-class AcorleService {
+export class AcorleService {
   constructor(key, url, name, isPrivate = true, weight = 1) {
     this.key = key;
     this.name = name;
@@ -73,12 +85,11 @@ class AcorleService {
   }
 }
 
-class AcorleClient {
+export class AcorleClient {
 
   constructor(zone, secret, regIntervalSeconds = DEFAULT_REG_INTERVAL_SECONDS, centerServer = DEFAULT_CENTER_SERVER_URL, logFunc = defaultLogFunc, requestFunc = defaultHttpRequestFunc) {
 
     this.status = 'IDLE';
-    this.antiReplayAllowSecondsRange = ANTI_REPLAY_ALLOW_SECONDS_RANGE;
 
     this.zone = zone;
     this.secret = secret;
@@ -116,10 +127,6 @@ class AcorleClient {
     this.logFunc = logFunc;
   }
 
-  setAntiReplayAllowSecondsRange(antiReplayAllowSecondsRange) {
-    this.antiReplayAllowSecondsRange = antiReplayAllowSecondsRange;
-  }
-
   async getSignature(timestamp) {
     return await jwtSignAsync({
       zone: this.zone,
@@ -130,16 +137,16 @@ class AcorleClient {
   async sendRequest(field, action, requestBody) {
     const options = {
       method: 'POST',
-      uri: this.centerServer,
+      cache: 'no-cache',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Authorization': `Bearer ${await this.getSignature(+new Date())}`
       },
     };
-    if (requestBody) options.content = JSON.stringify(requestBody);
+    if (requestBody) options.body = JSON.stringify(requestBody);
     const response = await this.requestFunc(`${this.centerServer}/rpc/${this.zone}/${field}/${action}`, options);
     try {
-      const data = JSON.parse(response.data);
+      const data = await response.json()
       if (response.status !== 200 || (data.code !== undefined && data.code !== null && data.code !== ResponseCodeType.OK)) {
         throw new Error(`HTTP Status: ${response.status}, RPC Status: ${data.code} (${data.message})`);
       }
@@ -257,7 +264,7 @@ class AcorleClient {
       context
     };
     try {
-      const parsedBody = await this.sendRequest(AcorleFieldEnum.CONFIG, AcorleActionEnum.SET, rpcSetConfigRequest);
+      await this.sendRequest(AcorleFieldEnum.CONFIG, AcorleActionEnum.SET, rpcSetConfigRequest);
       return true;
     } catch (err) {
       this.logFunc('error', `Failed to set configuration - ${err}`);
@@ -293,12 +300,6 @@ class AcorleClient {
 
 }
 
-module.exports = {
-  AcorleClient,
-  AcorleService,
-  ResponseCodeType,
-};
-
 // /////////////////////////////
-//      Ver. 2021/12/28       //
+//      Ver. 2023/06/16       //
 // /////////////////////////////

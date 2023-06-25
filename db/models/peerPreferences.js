@@ -1,5 +1,7 @@
-const { DataTypes } = require('sequelize');
-module.exports = sequelize => sequelize.define('peer_preferences', {
+import sequelize from 'sequelize';
+const { DataTypes } = sequelize;
+
+export const initModel = sequelize => sequelize.define('peer_preferences', {
     asn: {
         field: 'asn',
         primaryKey: true,

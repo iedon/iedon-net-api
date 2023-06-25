@@ -1,7 +1,7 @@
-const DefaultLoggerProvider = require('./defaultLoggerProvider')
-const log4js = require('log4js');
+import { DefaultLoggerProvider } from './defaultLoggerProvider.js';
+import log4js from 'log4js';
 
-module.exports = class Log4jsLoggerProvider extends DefaultLoggerProvider {
+export class Log4jsLoggerProvider extends DefaultLoggerProvider {
     constructor(app, loggerSettings) {
         super(app, loggerSettings);
         log4js.configure(this.loggerSettings.log4js);

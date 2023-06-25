@@ -1,4 +1,4 @@
-module.exports = class DefaultLoggerProvider {
+export class DefaultLoggerProvider {
     constructor(app, loggerSettings) {
         this.app = app;
         this.loggerSettings = loggerSettings;

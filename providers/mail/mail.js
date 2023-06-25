@@ -1,7 +1,5 @@
-
-module.exports = {
-    mail: (app, mailSettings={}) => {
-        app.mail = new (require(`./${mailSettings.provider || 'default'}MailProvider`))(app, mailSettings);
-        return async (_, next) => await next();
-    }
+export async function useMail(app, mailSettings={}) {
+    const pn = `${mailSettings.provider || 'default'}MailProvider`;
+    const handlerName = pn.charAt(0).toUpperCase() + pn.slice(1);
+    app.mail = new (await import(`./${pn}.js`))[handlerName](app, mailSettings);
 };

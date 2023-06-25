@@ -1,5 +1,7 @@
-const { DataTypes } = require('sequelize');
-module.exports = sequelize => sequelize.define('settings', {
+import sequelize from 'sequelize';
+const { DataTypes } = sequelize;
+
+export const initModel = sequelize => sequelize.define('settings', {
     key: {
         field: 'key',
         primaryKey: true,

@@ -1,5 +1,7 @@
-const { DataTypes } = require('sequelize');
-module.exports = sequelize => sequelize.define('posts', {
+import sequelize from 'sequelize';
+const { DataTypes } = sequelize;
+
+export const initModel = sequelize => sequelize.define('posts', {
     postId: {
         field: 'post_id',
         primaryKey: true,

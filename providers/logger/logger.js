@@ -1,7 +1,5 @@
-
-module.exports = {
-    logger: (app, loggerSettings={}) => {
-        app.logger = new (require(`./${loggerSettings.provider || 'default'}LoggerProvider`))(app, loggerSettings);
-        return async (_, next) => await next();
-    }
+export async function useLogger(app, loggerSettings={}) {
+    const pn = `${loggerSettings.provider || 'default'}LoggerProvider`;
+    const handlerName = pn.charAt(0).toUpperCase() + pn.slice(1);
+    app.logger = new (await import(`./${pn}.js`))[handlerName](app, loggerSettings);
 };
