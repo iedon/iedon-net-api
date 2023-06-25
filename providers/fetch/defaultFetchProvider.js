@@ -39,9 +39,13 @@ export class DefaultFetchProvider {
     }
 
     async post(url, data, dataType='json', options={}) {
+        let _data = data;
+        if (dataType === 'json') {
+            if (typeof _data !== 'string') _data = JSON.stringify(data);
+        }
         const POST_OPTIONS = {
             method: 'POST',
-            data,
+            body: _data,
             header: {
                 'Content-Type': this.getContentType(dataType)
             }
