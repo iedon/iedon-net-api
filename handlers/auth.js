@@ -57,9 +57,9 @@ import sshpk from 'sshpk';
 
 export class AuthHandler extends BaseHandler {
 
-    constructor(router) {
-        super(router);
-        this.router.post('/auth', async (ctx, _) => {
+    constructor(app) {
+        super(app);
+        this.app.post('/auth', async ctx => {
             const action = ctx.request.body.action;
             switch (action) {
                 case 'query': return await this.query(ctx);

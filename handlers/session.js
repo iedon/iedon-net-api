@@ -27,9 +27,9 @@ import { nullOrEmpty, IPV4_REGEX, IPV6_REGEX, ASN_MAX, ASN_MIN } from "../common
 // TODO: Improve: External I/O Request in Transaction
 export class SessionHandler extends BaseHandler {
 
-    constructor(router) {
-        super(router);
-        this.router.post('/session', async (ctx, _) => {
+    constructor(app) {
+        super(app);
+        this.app.post('/session', async ctx => {
             const action = ctx.request.body.action;
             if (action === 'enum') return await this.enum(ctx);
 

@@ -3,9 +3,9 @@ import { nullOrEmpty, bcryptGenSalt, bcryptGenHash } from "../common/helper.js";
 
 export class SettingsHandler extends BaseHandler {
 
-    constructor(router) {
-        super(router);
-        this.router.post('/settings', async (ctx, _) => {
+    constructor(app) {
+        super(app);
+        this.app.post('/settings', async ctx => {
             const action = ctx.request.body.action;
             switch (action) {
                 case 'password': return await this.password(ctx);

@@ -11,17 +11,18 @@ import { BaseHandler } from "./base.js";
 
 export class PingHandler extends BaseHandler {
 
-    constructor(router) {
-        super(router);
-        this.router.post('/ping', async (ctx, _) => await this.ping(ctx));
+    constructor(app) {
+        super(app);
+        this.app.post('/ping', async c => await this.ping(c));
     }
 
-    async ping(ctx) {
-        if (ctx.request.body.action !== 'ping')
+    async ping(c) {
+        const body = await c.req.json();
+        if (!body || body.action !== 'ping')
         {
-            return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
         }
-        this.makeResponse(ctx, this.RESPONSE_CODE.OK, 'pong');
+        return this.makeResponse(c, this.RESPONSE_CODE.OK, 'pong');
     }
 
 }

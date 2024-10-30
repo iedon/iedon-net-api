@@ -8,7 +8,7 @@ export const RESPONSE_CODE = {
     ROUTER_NOT_AVAILABLE: 6
 };
 
-export function makeResponse(ctx, code, data) {
+export function makeResponse(c, code, data) {
     let message = 'ok';
     switch (code) {
         default: case RESPONSE_CODE.OK: message = 'ok'; break;
@@ -19,10 +19,9 @@ export function makeResponse(ctx, code, data) {
         case RESPONSE_CODE.ROUTER_OPERATION_FAILED: message = 'router operation failed'; break;
         case RESPONSE_CODE.ROUTER_NOT_AVAILABLE: message = 'router not available'; break;
     };
-    ctx.response.type = 'json';
-    ctx.body = {
+    return c.json({
         code,
         message,
         data: data || ''
-    };
+    });
 }

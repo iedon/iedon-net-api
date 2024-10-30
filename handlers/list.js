@@ -39,9 +39,9 @@ import { nullOrEmpty } from "../common/helper.js";
 
 export class ListHandler extends BaseHandler {
 
-    constructor(router) {
-        super(router);
-        this.router.post('/list', async (ctx, _) => {
+    constructor(app) {
+        super(app);
+        this.app.post('/list', async ctx => {
             const type = ctx.request.body.type;
             switch (type) {
                 case 'routers': return await this.routers(ctx);

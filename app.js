@@ -16,13 +16,11 @@ import { useDbContext } from './db/dbContext.js';
 import { useCore } from './providers/core/core.js';
 import { useRouter } from './routes.js';
 
-import Koa from 'koa'
-import KoaBodyParser from 'koa-bodyparser'
+import { Hono } from 'hono';
+const app  = new Hono();
 
 
-const app = new Koa();
 app.settings = localSettings;
-app.use(KoaBodyParser());
 
 
 (async () => {

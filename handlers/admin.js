@@ -5,9 +5,9 @@ import { nullOrEmpty, ASN_MIN, ASN_MAX } from "../common/helper.js";
 // TODO: Improve: External I/O Request in Transaction
 export class AdminHandler extends BaseHandler {
 
-    constructor(router) {
-        super(router);
-        this.router.post('/admin', async (ctx, _) => {
+    constructor(app) {
+        super(app);
+        this.app.post('/admin', async ctx => {
 
             // To see if current logged user has admin previlieges
             try {
