@@ -1,16 +1,15 @@
-export async function useRouter(app, handlers) {
-  app.routeHandlers = {};
+import adminHandler from './handlers/admin.js';
+import authHandler from './handlers/auth.js';
+import listHandler from './handlers/list.js';
+import tokenHandler from './handlers/token.js';
+import sessionHandler from './handlers/session.js';
+import settingsHandler from './handlers/settings.js';
 
-  const handlerPromises = handlers
-    .filter(h => h !== 'base')
-    .map(async h => {
-      const handlerName = `${h.charAt(0).toUpperCase()}${h.slice(1)}Handler`;
-      const module = await import(`./handlers/${h}.js`);
-      return [handlerName, new module[handlerName](app)];
-    });
-
-  const hp = await Promise.all(handlerPromises);
-  hp.forEach(([name, instance]) => {
-    app.routeHandlers[name] = instance;
-  });
+export function registerRoutes(app) {
+  app.server.post('/admin', adminHandler)
+  .post('/auth', authHandler)
+  .get('/list/:type/:postId?', listHandler)
+  .get('/token', tokenHandler)
+  .post('/session', sessionHandler)
+  .post('/settings', settingsHandler);
 }

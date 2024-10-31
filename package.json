@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "private": true,
   "scripts": {
-    "start": "bun app.js",
+    "prod": "bun app.js",
     "dev": "bun --watch app.js"
   },
   "dependencies": {

@@ -27,13 +27,13 @@ export async function useDbContext(app, dbSettings) {
   // database entities
   const models = {};
   const loadedModels = ['settings', 'routers', 'bgpSessions', 'posts', 'peerPreferences'];
-  
+
   await Promise.all(loadedModels.map(async m => {
     models[m] = (await import(`./models/${m}.js`)).initModel(sequelize);
   }));
 
   app.sequelize = sequelize;
-  
+
   try {
     await sequelize.sync(/*{ alter: true }*/);
     await models.settings.bulkCreate([
@@ -49,8 +49,5 @@ export async function useDbContext(app, dbSettings) {
     }
   }
 
-  app.server.use(async (c, next) => {
-    c.set('models', models);
-    await next();
-  });
+  app.models = models;
 }
