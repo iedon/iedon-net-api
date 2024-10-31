@@ -59,13 +59,13 @@ export class AuthHandler extends BaseHandler {
 
     constructor(app) {
         super(app);
-        this.app.post('/auth', async ctx => {
-            const action = ctx.request.body.action;
+        this.app.server.post('/auth', async c => {
+            const action = c.var.body.action;
             switch (action) {
-                case 'query': return await this.query(ctx);
-                case 'request': return await this.request(ctx);
-                case 'challenge': return await this.challenge(ctx);
-                default: return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+                case 'query': return await this.query(c);
+                case 'request': return await this.request(c);
+                case 'challenge': return await this.challenge(c);
+                default: return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
             }
         });
     }
@@ -77,9 +77,9 @@ export class AuthHandler extends BaseHandler {
         return true;
     }
 
-    async query(ctx) {
-        if (!this.checkAsn(ctx.request.body.asn)) return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
-        const asn = String(ctx.request.body.asn).trim();
+    async query(c) {
+        if (!this.checkAsn(c.var.body.asn)) return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
+        const asn = String(c.var.body.asn).trim();
 
         let availableAuthMethods = [];
         const addAuthMethods = element => {
@@ -88,7 +88,7 @@ export class AuthHandler extends BaseHandler {
             }
         }
 
-        const originalHash = await ctx.models.peerPreferences.findOne({
+        const originalHash = await c.var.models.peerPreferences.findOne({
             attributes: [ 'password' ],
             where: {
                 asn: Number(asn)
@@ -101,16 +101,16 @@ export class AuthHandler extends BaseHandler {
         });
 
         let person = '';
-        const asnWhois = await ctx.app.whois.lookup(`AS${asn}`);
+        const asnWhois = await c.var.app.whois.lookup(`AS${asn}`);
         if (asnWhois && !nullOrEmpty(asnWhois.adminC) && typeof asnWhois.adminC === 'string')
         {
             // Scan admin-c person
-            const adminCWhois = await ctx.app.whois.lookup(asnWhois.adminC);
+            const adminCWhois = await c.var.app.whois.lookup(asnWhois.adminC);
             if (adminCWhois) {
 
                 if (!nullOrEmpty(adminCWhois.person) && typeof adminCWhois.person === 'string') person = adminCWhois.person.trim();
 
-                if (ctx.app.settings.mailSettings.enableLoginByMail) {
+                if (c.var.app.settings.mailSettings.enableLoginByMail) {
                     // Scan entry 'contact' in admin-c for e-mail address
                     const possibleEmailEntries = [ 'contact', 'eMail', 'mail' ];
                     possibleEmailEntries.forEach(key => {
@@ -138,7 +138,7 @@ export class AuthHandler extends BaseHandler {
 
                 // Scan admin-c's mntner
                 if (!nullOrEmpty(adminCWhois.mntBy) && typeof adminCWhois.mntBy === 'string') {
-                    const mntByWhois = await ctx.app.whois.lookup(adminCWhois.mntBy);
+                    const mntByWhois = await c.var.app.whois.lookup(adminCWhois.mntBy);
                     if (mntByWhois) {
                         // Scan entry 'auth'
                         if (!nullOrEmpty(mntByWhois.auth) && typeof mntByWhois.auth === 'string') {
@@ -181,35 +181,35 @@ export class AuthHandler extends BaseHandler {
                 person,
                 availableAuthMethods
             },
-            ctx.app.settings.authHandler.stateSignSecret,
-            ctx.app.settings.authHandler.stateSignOptions);
+            c.var.app.settings.authHandler.stateSignSecret,
+            c.var.app.settings.authHandler.stateSignOptions);
         } catch (error) {
             availableAuthMethods = [];
-            ctx.app.logger.getLogger('app').error(error);
+            c.var.app.logger.getLogger('app').error(error);
         }
-        return this.makeResponse(ctx, this.RESPONSE_CODE.OK, {
+        return this.makeResponse(c, this.RESPONSE_CODE.OK, {
             person,
             authState,
             availableAuthMethods
         });
     }
 
-    async request(ctx) {
-        let authState = ctx.request.body.authState;
-        let authMethod = ctx.request.body.authMethod;
-        if (ctx.request.body.action !== 'request' ||
+    async request(c) {
+        let authState = c.var.body.authState;
+        let authMethod = c.var.body.authMethod;
+        if (c.var.body.action !== 'request' ||
             nullOrEmpty(authState) || typeof authState !== 'string' ||
             nullOrEmpty(authMethod) || typeof authMethod !== 'number' ||
             authMethod < 0)
         {
-            return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
         }
 
         try {
-            authState = await verifyAsync(authState, ctx.app.settings.authHandler.stateSignSecret, ctx.app.settings.authHandler.stateSignOptions);
-            if (authMethod >= authState.availableAuthMethods.length) return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            authState = await verifyAsync(authState, c.var.app.settings.authHandler.stateSignSecret, c.var.app.settings.authHandler.stateSignOptions);
+            if (authMethod >= authState.availableAuthMethods.length) return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
         } catch {
-            return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
         }
 
         for (let i = 0; i < authState.availableAuthMethods.length; i++) {
@@ -224,8 +224,8 @@ export class AuthHandler extends BaseHandler {
         if (authMethod.type === 'password') {
             authChallenge = authState.asn;
         } else if (authMethod.type === 'e-mail') {
-            authChallenge = ctx.app.settings.mailSettings.senderEmailAddress;
-            await ctx.app.mail.send(authMethod.data,
+            authChallenge = c.var.app.settings.mailSettings.senderEmailAddress;
+            await c.var.app.mail.send(authMethod.data,
                 'Authentication Code',
                 `Hi ${authState.person || authState.asn},\r\nThis is your challenge code: ${authState.code}\r\n\r\nYou've received this mail because you are authenticating with us.\r\nDo not reply this mail. It is sent automatically.\r\n\r\nHave a nice day!\r\n`);
         } else if (authMethod.type === 'pgp-fingerprint' || authMethod.type.startsWith('ssh-')) {
@@ -240,33 +240,33 @@ export class AuthHandler extends BaseHandler {
                 authMethod,
                 code: authState.code
             },
-            ctx.app.settings.authHandler.stateSignSecret,
-            ctx.app.settings.authHandler.stateSignOptions);
+            c.var.app.settings.authHandler.stateSignSecret,
+            c.var.app.settings.authHandler.stateSignOptions);
         } catch (error) {
             authChallenge = '';
-            ctx.app.logger.getLogger('app').error(error);
+            c.var.app.logger.getLogger('app').error(error);
         }
 
         if (authChallenge === '') authState = '';
-        return this.makeResponse(ctx, this.RESPONSE_CODE.OK, {
+        return this.makeResponse(c, this.RESPONSE_CODE.OK, {
             authState,
             authChallenge
         });
     }
 
-    async challenge(ctx) {
-        let authState = ctx.request.body.authState;
-        const authData = ctx.request.body.data;
-        if (ctx.request.body.action !== 'challenge' ||
+    async challenge(c) {
+        let authState = c.var.body.authState;
+        const authData = c.var.body.data;
+        if (c.var.body.action !== 'challenge' ||
             nullOrEmpty(authState) || typeof authState !== 'string')
         {
-            return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
         }
 
         try {
-            authState = await verifyAsync(authState, ctx.app.settings.authHandler.stateSignSecret, ctx.app.settings.authHandler.stateSignOptions);
+            authState = await verifyAsync(authState, c.var.app.settings.authHandler.stateSignSecret, c.var.app.settings.authHandler.stateSignOptions);
         } catch {
-            return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
         }
 
         let authResult = false;
@@ -276,10 +276,10 @@ export class AuthHandler extends BaseHandler {
 
         if (type === 'password') {
 
-            if (nullOrEmpty(authData) || typeof authData !== 'string') return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            if (nullOrEmpty(authData) || typeof authData !== 'string') return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
             const rawPassword = authData.trim();
             try {
-                const hash = await ctx.models.peerPreferences.findOne({
+                const hash = await c.var.models.peerPreferences.findOne({
                     attributes: [ 'password' ],
                     where: {
                         asn: Number(authState.asn)
@@ -287,12 +287,12 @@ export class AuthHandler extends BaseHandler {
                 });
                 if (await bcryptCompare(rawPassword, hash.dataValues.password)) authResult = true;
             } catch (error) {
-                ctx.app.logger.getLogger('app').error(error);
+                c.var.app.logger.getLogger('app').error(error);
             }
 
         } else if (type === 'e-mail') {
 
-            if (nullOrEmpty(authData) || typeof authData !== 'string') return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            if (nullOrEmpty(authData) || typeof authData !== 'string') return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
             if (authData.trim() === code) authResult = true;
 
         } else if (type === 'pgp-fingerprint') {
@@ -301,7 +301,7 @@ export class AuthHandler extends BaseHandler {
                 !authData.signedMessage || typeof authData.signedMessage !== 'string' ||
                 authData.signedMessage.indexOf(code) === -1)
             {
-                return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+                return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
             }
 
             try {
@@ -327,7 +327,7 @@ export class AuthHandler extends BaseHandler {
         } else if (type.startsWith('ssh-')) {
 
             if (nullOrEmpty(authData) || typeof authData !== 'string' || authData.indexOf(code) === -1) {
-                return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+                return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
             }
 
             try {
@@ -350,14 +350,14 @@ export class AuthHandler extends BaseHandler {
             }
         }
 
-        if (authResult) token = await ctx.app.token.generateToken({
+        if (authResult) token = await c.var.app.token.generateToken({
             asn: authState.asn,
             person: authState.person
         });
 
         // This is special case we should manually append token to body because this route('/path') will not pass through core middleware.
         // And this is the first time the user gets a token
-        this.makeResponse(ctx, this.RESPONSE_CODE.OK, { authResult });
-        Object.assign(ctx.body, { token });
+        this.makeResponse(c, this.RESPONSE_CODE.OK, { authResult });
+        Object.assign(c.body, { token });
     }
 }

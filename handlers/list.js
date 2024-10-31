@@ -41,22 +41,22 @@ export class ListHandler extends BaseHandler {
 
     constructor(app) {
         super(app);
-        this.app.post('/list', async ctx => {
-            const type = ctx.request.body.type;
+        this.app.server.post('/list', async c => {
+            const type = c.var.body.type;
             switch (type) {
-                case 'routers': return await this.routers(ctx);
-                case 'posts': return await this.posts(ctx);
-                case 'post': return await this.post(ctx);
-                case 'config': return await this.config(ctx);
-                default: return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+                case 'routers': return await this.routers(c);
+                case 'posts': return await this.posts(c);
+                case 'post': return await this.post(c);
+                case 'config': return await this.config(c);
+                default: return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
             }
         });
     }
 
-    async routers(ctx) {
+    async routers(c) {
         const routers = [];
         try {
-            const result = await ctx.models.routers.findAll({
+            const result = await c.var.models.routers.findAll({
                 attributes: [
                     'uuid', 'name', 'description', 'location', 'open_peering', 'auto_peering', 'session_capacity',
                     'ipv4', 'ipv6', 'ipv6_link_local', 'link_types', 'extensions'
@@ -73,7 +73,7 @@ export class ListHandler extends BaseHandler {
                 openPeering: !!result[i].dataValues.open_peering,
                 autoPeering: !!result[i].dataValues.auto_peering,
                 sessionCapacity: result[i].dataValues.session_capacity,
-                sessionCount: (await ctx.models.bgpSessions.count({
+                sessionCount: (await c.var.models.bgpSessions.count({
                     where: {
                         router: result[i].dataValues.uuid
                     }
@@ -85,15 +85,15 @@ export class ListHandler extends BaseHandler {
                 extensions: result[i].dataValues.extensions ? JSON.parse(result[i].dataValues.extensions) : []
             });
         } catch (error) {
-            ctx.app.logger.getLogger('app').error(error);
+            c.var.app.logger.getLogger('app').error(error);
         }
-        this.makeResponse(ctx, this.RESPONSE_CODE.OK, { routers });
+        return this.makeResponse(c, this.RESPONSE_CODE.OK, { routers });
     }
 
-    async posts(ctx) {
+    async posts(c) {
         const posts = [];
         try {
-            (await ctx.models.posts.findAll({
+            (await c.var.models.posts.findAll({
                 attributes: [ 'post_id', 'category', 'title', 'created_at', 'updated_at' ]
             })).forEach(e => {
                 posts.push({
@@ -105,18 +105,18 @@ export class ListHandler extends BaseHandler {
                 });
             });
         } catch (error) {
-            ctx.app.logger.getLogger('app').error(error);
+            c.var.app.logger.getLogger('app').error(error);
         }
-        this.makeResponse(ctx, this.RESPONSE_CODE.OK, { posts });
+        return this.makeResponse(c, this.RESPONSE_CODE.OK, { posts });
     }
 
-    async post(ctx) {
-        const postId = ctx.request.body.postId;
-        if (nullOrEmpty(postId) || typeof postId !== 'number') return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+    async post(c) {
+        const postId = c.var.body.postId;
+        if (nullOrEmpty(postId) || typeof postId !== 'number') return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
 
         let post = null;
         try {
-            const result = await ctx.models.posts.findOne({
+            const result = await c.var.models.posts.findOne({
                 attributes: [ 'post_id', 'category', 'title', 'content', 'created_at', 'updated_at' ],
                 where: {
                     post_id: postId
@@ -133,19 +133,19 @@ export class ListHandler extends BaseHandler {
                 }
             }
         } catch (error) {
-            ctx.app.logger.getLogger('app').error(error);
+            c.var.app.logger.getLogger('app').error(error);
         }
-        this.makeResponse(ctx, this.RESPONSE_CODE.OK, post);
+        return this.makeResponse(c, this.RESPONSE_CODE.OK, post);
     }
 
-    async config(ctx) {
+    async config(c) {
         let config = null;
         try {
-            const netAsn = await ctx.models.settings.findOne({ attributes: [ 'value' ], where: { key: 'NET_ASN' } });
-            const netName = await ctx.models.settings.findOne({ attributes: [ 'value' ], where: { key: 'NET_NAME' } });
-            const netDesc = await ctx.models.settings.findOne({ attributes: [ 'value' ], where: { key: 'NET_DESC' } });
-            const footerText = await ctx.models.settings.findOne({ attributes: [ 'value' ], where: { key: 'FOOTER_TEXT' } });
-            const maintenanceText = await ctx.models.settings.findOne({ attributes: [ 'value' ], where: { key: 'MAINTENANCE_TEXT' } });
+            const netAsn = await c.var.models.settings.findOne({ attributes: [ 'value' ], where: { key: 'NET_ASN' } });
+            const netName = await c.var.models.settings.findOne({ attributes: [ 'value' ], where: { key: 'NET_NAME' } });
+            const netDesc = await c.var.models.settings.findOne({ attributes: [ 'value' ], where: { key: 'NET_DESC' } });
+            const footerText = await c.var.models.settings.findOne({ attributes: [ 'value' ], where: { key: 'FOOTER_TEXT' } });
+            const maintenanceText = await c.var.models.settings.findOne({ attributes: [ 'value' ], where: { key: 'MAINTENANCE_TEXT' } });
             config = {
                 netAsn: netAsn.dataValues?.value || '',
                 netName: netName.dataValues?.value || '',
@@ -154,8 +154,8 @@ export class ListHandler extends BaseHandler {
                 maintenanceText: maintenanceText.dataValues?.value || ''
             }
         } catch (error) {
-            ctx.app.logger.getLogger('app').error(error);
+            c.var.app.logger.getLogger('app').error(error);
         }
-        this.makeResponse(ctx, this.RESPONSE_CODE.OK, config);
+        return this.makeResponse(c, this.RESPONSE_CODE.OK, config);
     }
 }

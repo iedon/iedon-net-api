@@ -4,18 +4,13 @@
   "version": "2.0.0",
   "private": true,
   "scripts": {
-    "start": "bun bin/peerapi.js",
-    "dev": "bun --watch bin/peerapi.js",
-    "prod": "pm2 start bin/peerapi.js"
+    "start": "bun app.js",
+    "dev": "bun --watch app.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
-    "debug": "^4.3.7",
     "hono": "^4.6.8",
     "jsonwebtoken": "^9.0.2",
-    "koa": "^2.15.3",
-    "koa-bodyparser": "^4.4.1",
-    "koa-router": "^13.0.1",
     "log4js": "^6.9.1",
     "mysql2": "^3.11.3",
     "nodemailer": "^6.9.16",

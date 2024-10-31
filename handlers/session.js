@@ -29,33 +29,33 @@ export class SessionHandler extends BaseHandler {
 
     constructor(app) {
         super(app);
-        this.app.post('/session', async ctx => {
-            const action = ctx.request.body.action;
-            if (action === 'enum') return await this.enum(ctx);
+        this.app.server.post('/session', async c => {
+            const action = c.var.body.action;
+            if (action === 'enum') return await this.enum(c);
 
-            const routerUuid = ctx.request.body.router;
-            if (nullOrEmpty(routerUuid) || typeof routerUuid !== 'string') return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            const routerUuid = c.var.body.router;
+            if (nullOrEmpty(routerUuid) || typeof routerUuid !== 'string') return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
             switch (action) {
-                case 'add': return await this.add(ctx, routerUuid);
-                case 'delete': return await this.delete(ctx, routerUuid);
-                case 'enable': return await this.enable(ctx, routerUuid);
-                case 'disable': return await this.disable(ctx, routerUuid);
-                case 'query': return await this.query(ctx, routerUuid);
-                case 'info': return await this.info(ctx, routerUuid);
-                default: return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+                case 'add': return await this.add(c, routerUuid);
+                case 'delete': return await this.delete(c, routerUuid);
+                case 'enable': return await this.enable(c, routerUuid);
+                case 'disable': return await this.disable(c, routerUuid);
+                case 'query': return await this.query(c, routerUuid);
+                case 'info': return await this.info(c, routerUuid);
+                default: return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
             }
         });
     }
 
-    async add(ctx, routerUuid) {
-        const _ipv4 = ctx.request.body.ipv4;
-        const _ipv6 = ctx.request.body.ipv6;
-        const _ipv6_link_local = ctx.request.body.ipv6LinkLocal;
-        const _type = ctx.request.body.type;
-        const _extensions = ctx.request.body.extensions;
-        let _endpoint = ctx.request.body.endpoint;
-        const _credential = ctx.request.body.credential;
-        const _data = ctx.request.body.data;
+    async add(c, routerUuid) {
+        const _ipv4 = c.var.body.ipv4;
+        const _ipv6 = c.var.body.ipv6;
+        const _ipv6_link_local = c.var.body.ipv6LinkLocal;
+        const _type = c.var.body.type;
+        const _extensions = c.var.body.extensions;
+        let _endpoint = c.var.body.endpoint;
+        const _credential = c.var.body.credential;
+        const _data = c.var.body.data;
 
         if (
             (nullOrEmpty(_ipv4) && nullOrEmpty(_ipv6) && nullOrEmpty(_ipv6_link_local)) ||
@@ -65,22 +65,22 @@ export class SessionHandler extends BaseHandler {
             // nullOrEmpty(_credential)) ||
             !Array.isArray(_extensions) || _extensions.some(e => typeof e !== 'string')
         ) {
-            return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
         }
 
         // To see if current logged user has admin previlieges
         let isAdmin = false;
         try {
-            const netAsn = (await ctx.models.settings.findOne({ attributes: [ 'value' ], where: { key: 'NET_ASN' } })).dataValues.value || '';
-            if (netAsn === ctx.state.asn) isAdmin = true;
+            const netAsn = (await c.var.models.settings.findOne({ attributes: [ 'value' ], where: { key: 'NET_ASN' } })).dataValues.value || '';
+            if (netAsn === c.var.state.asn) isAdmin = true;
         } catch (error) {
-            ctx.app.logger.getLogger('auth').error(error);
-            return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            c.var.app.logger.getLogger('auth').error(error);
+            return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
         }
 
-        const _asn = ctx.request.body.asn;
+        const _asn = c.var.body.asn;
         if (isAdmin && (nullOrEmpty(_asn) || typeof _asn !== 'number' || _asn < ASN_MIN || _asn > ASN_MAX)) {
-            return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
         }
 
         if ((!nullOrEmpty(_ipv4) && typeof _ipv4 !== 'string') ||
@@ -92,7 +92,7 @@ export class SessionHandler extends BaseHandler {
             (!nullOrEmpty(_endpoint) && typeof _endpoint !== 'string') ||
             (!nullOrEmpty(_credential) && typeof _credential !== 'string')
         ) {
-            return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+            return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
         }
 
         if (!nullOrEmpty(_endpoint)) {
@@ -101,19 +101,19 @@ export class SessionHandler extends BaseHandler {
                 const url = new URL(`https://${_endpoint}`);
                 _endpoint = url.host;
             } catch {
-                return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+                return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
             }
         }
 
-        const transaction = await ctx.app.sequelize.transaction();
+        const transaction = await c.var.app.sequelize.transaction();
         try {
-            const url = await this.getRouterCallbackUrl(ctx, routerUuid, transaction);
+            const url = await this.getRouterCallbackUrl(c, routerUuid, transaction);
             if (!url) {
                 await transaction.rollback();
-                return this.makeResponse(ctx, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
+                return this.makeResponse(c, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
             }
 
-            const routerQuery = await ctx.models.routers.findOne({
+            const routerQuery = await c.var.models.routers.findOne({
                 attributes: [ 'auto_peering', 'session_capacity', 'ipv4', 'ipv6', 'ipv6_link_local', 'link_types', 'extensions' ],
                 where: {
                     uuid: routerUuid,
@@ -132,14 +132,14 @@ export class SessionHandler extends BaseHandler {
             } catch {
                 // This also supresses JSON exception
                 await transaction.rollback();
-                return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+                return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
             }
 
 
             // Check whether the router is available to add a new session
             if (routerQuery && routerQuery.dataValues.session_capacity > 0) {
                 const capacity = routerQuery.dataValues.session_capacity;
-                const routerSessionCount = await ctx.models.bgpSessions.count({
+                const routerSessionCount = await c.var.models.bgpSessions.count({
                     where: {
                         router: routerUuid
                     },
@@ -149,19 +149,19 @@ export class SessionHandler extends BaseHandler {
                 // router is open and has enough capacity for new peerings
                 if (capacity - routerSessionCount > 0) {
 
-                    const mySessionCount = await ctx.models.bgpSessions.count({
+                    const mySessionCount = await c.var.models.bgpSessions.count({
                         where: {
                             router: routerUuid,
-                            asn: Number(ctx.state.asn)
+                            asn: Number(c.var.state.asn)
                         },
                         transaction
                     });
 
-                    if (mySessionCount > 0xFF) throw new Error(`Too many sessions for peer "${ctx.state.asn}" on router "${routerUuid}"`);
+                    if (mySessionCount > 0xFF) throw new Error(`Too many sessions for peer "${c.var.state.asn}" on router "${routerUuid}"`);
 
-                    const peerAsn = isAdmin ? _asn : Number(ctx.state.asn)
+                    const peerAsn = isAdmin ? _asn : Number(c.var.state.asn)
                     const ifname = `dn${peerAsn.toString(36)}${mySessionCount.toString(16)}`;
-                    await ctx.models.bgpSessions.create({
+                    await c.var.models.bgpSessions.create({
                         router: routerUuid,
                         asn: peerAsn,
                         status: routerQuery.dataValues.auto_peering ? 1 : -1,
@@ -177,7 +177,7 @@ export class SessionHandler extends BaseHandler {
                     }, { transaction });
 
                     if (routerQuery.dataValues.auto_peering) {
-                        const response = await ctx.app.fetch.post(url, {
+                        const response = await c.var.app.fetch.post(url, {
                             action: 'add',
                             router: routerUuid,
                             asn: peerAsn,
@@ -201,78 +201,78 @@ export class SessionHandler extends BaseHandler {
 
             await transaction.commit();
         } catch (error) {
-            ctx.app.logger.getLogger('app').error(error);
+            c.var.app.logger.getLogger('app').error(error);
             await transaction.rollback();
-            return this.makeResponse(ctx, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
+            return this.makeResponse(c, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
         }
 
-        return this.makeResponse(ctx, this.RESPONSE_CODE.OK);
+        return this.makeResponse(c, this.RESPONSE_CODE.OK);
     }
 
-    async delete(ctx, routerUuid) {
-        return await this.simpleActionHandler(ctx, routerUuid, 'delete');
+    async delete(c, routerUuid) {
+        return await this.simpleActionHandler(c, routerUuid, 'delete');
     }
 
-    async enable(ctx, routerUuid) {
-        return await this.simpleActionHandler(ctx, routerUuid, 'enable');
+    async enable(c, routerUuid) {
+        return await this.simpleActionHandler(c, routerUuid, 'enable');
     }
 
-    async disable(ctx, routerUuid) {
-        return await this.simpleActionHandler(ctx, routerUuid, 'disable');
+    async disable(c, routerUuid) {
+        return await this.simpleActionHandler(c, routerUuid, 'disable');
     }
 
-    async info(ctx, routerUuid) {
-        const data = ctx.request.body.data || '';
+    async info(c, routerUuid) {
+        const data = c.var.body.data || '';
 
-        const url = await this.getRouterCallbackUrl(ctx, routerUuid);
-        if (!url) return this.makeResponse(ctx, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
+        const url = await this.getRouterCallbackUrl(c, routerUuid);
+        if (!url) return this.makeResponse(c, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
 
-        const response = await ctx.app.fetch.post(url, {
+        const response = await c.var.app.fetch.post(url, {
             action: 'info',
-            asn: ctx.state.asn,
+            asn: c.var.state.asn,
             data
         }, 'json');
 
-        if ((!response || response.status !== 200 || nullOrEmpty(response.data) || !response.data.success)) return this.makeResponse(ctx, this.RESPONSE_CODE.ROUTER_OPERATION_FAILED);
-        return this.makeResponse(ctx, this.RESPONSE_CODE.OK, response.data.data);
+        if ((!response || response.status !== 200 || nullOrEmpty(response.data) || !response.data.success)) return this.makeResponse(c, this.RESPONSE_CODE.ROUTER_OPERATION_FAILED);
+        return this.makeResponse(c, this.RESPONSE_CODE.OK, response.data.data);
     }
 
-    async query(ctx, routerUuid) {
-        const sessionUuid = ctx.request.body.session;
-        if (nullOrEmpty(sessionUuid) || typeof sessionUuid !== 'string') return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+    async query(c, routerUuid) {
+        const sessionUuid = c.var.body.session;
+        if (nullOrEmpty(sessionUuid) || typeof sessionUuid !== 'string') return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
 
-        const session = await this.getBgpSession(ctx, sessionUuid);
-        if (!session) return this.makeResponse(ctx, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
+        const session = await this.getBgpSession(c, sessionUuid);
+        if (!session) return this.makeResponse(c, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
 
         // Reject requests are not belonging to this user
-        if (session.asn !== Number(ctx.state.asn)) return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+        if (session.asn !== Number(c.var.state.asn)) return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
 
-        if (session.status < 1) return this.makeResponse(ctx, this.RESPONSE_CODE.OK, '');
+        if (session.status < 1) return this.makeResponse(c, this.RESPONSE_CODE.OK, '');
 
-        const url = await this.getRouterCallbackUrl(ctx, routerUuid);
-        if (!url) return this.makeResponse(ctx, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
+        const url = await this.getRouterCallbackUrl(c, routerUuid);
+        if (!url) return this.makeResponse(c, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
 
-        const response = await ctx.app.fetch.post(url, {
+        const response = await c.var.app.fetch.post(url, {
             action: 'query',
-            asn: ctx.state.asn,
+            asn: c.var.state.asn,
             interface: session.interface,
             data: session.data || ''
         }, 'json');
 
-        if ((!response || response.status !== 200 || nullOrEmpty(response.data) || !response.data.success)) return this.makeResponse(ctx, this.RESPONSE_CODE.ROUTER_OPERATION_FAILED);
-        return this.makeResponse(ctx, this.RESPONSE_CODE.OK, response.data.data);
+        if ((!response || response.status !== 200 || nullOrEmpty(response.data) || !response.data.success)) return this.makeResponse(c, this.RESPONSE_CODE.ROUTER_OPERATION_FAILED);
+        return this.makeResponse(c, this.RESPONSE_CODE.OK, response.data.data);
     }
 
-    async enum(ctx) {
+    async enum(c) {
         const sessions = [];
         try {
-            const result = await ctx.models.bgpSessions.findAll({
+            const result = await c.var.models.bgpSessions.findAll({
                 attributes: [
                                 'uuid', 'router', 'status', 'ipv4', 'ipv6', 'ipv6_link_local', 'type',
                                 'extensions', 'interface', 'endpoint', 'credential', 'data'
                             ],
                 where: {
-                    asn: Number(ctx.state.asn)
+                    asn: Number(c.var.state.asn)
                 }
             });
             for (let i = 0; i < result.length; i++) sessions.push({
@@ -290,13 +290,13 @@ export class SessionHandler extends BaseHandler {
                 data: result[i].dataValues.data ? JSON.parse(result[i].dataValues.data) : ''
             });
         } catch (error) {
-            ctx.app.logger.getLogger('app').error(error);
-            return this.makeResponse(ctx, this.RESPONSE_CODE.SERVER_ERROR);
+            c.var.app.logger.getLogger('app').error(error);
+            return this.makeResponse(c, this.RESPONSE_CODE.SERVER_ERROR);
         }
-        this.makeResponse(ctx, this.RESPONSE_CODE.OK, { sessions });
+        return this.makeResponse(c, this.RESPONSE_CODE.OK, { sessions });
     }
 
-    async getRouterCallbackUrl(ctx, routerUuid, transaction=null) {
+    async getRouterCallbackUrl(c, routerUuid, transaction=null) {
         const options = {
             attributes: [ 'callback_url' ],
             where: {
@@ -305,11 +305,11 @@ export class SessionHandler extends BaseHandler {
             }
         };
         if (transaction !== null) Object.assign(options, { transaction });
-        const result = await ctx.models.routers.findOne(options);
+        const result = await c.var.models.routers.findOne(options);
         return result ? result.dataValues.callback_url : null;
     }
 
-    async getBgpSession(ctx, uuid, transaction=null) {
+    async getBgpSession(c, uuid, transaction=null) {
         const options = {
             attributes: [
                             'asn', 'status', 'ipv4', 'ipv6', 'ipv6_link_local', 'type',
@@ -320,7 +320,7 @@ export class SessionHandler extends BaseHandler {
             }
         };
         if (transaction !== null) Object.assign(options, { transaction });
-        const result = await ctx.models.bgpSessions.findOne(options);
+        const result = await c.var.models.bgpSessions.findOne(options);
         return result ? {
             asn: result.dataValues.asn,
             status: result.dataValues.status,
@@ -336,31 +336,31 @@ export class SessionHandler extends BaseHandler {
         } : null;
     }
 
-    async simpleActionHandler(ctx, routerUuid, action) {
-        const sessionUuid = ctx.request.body.session;
-        if (nullOrEmpty(sessionUuid) || typeof sessionUuid !== 'string') return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+    async simpleActionHandler(c, routerUuid, action) {
+        const sessionUuid = c.var.body.session;
+        if (nullOrEmpty(sessionUuid) || typeof sessionUuid !== 'string') return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
 
-        const transaction = await ctx.app.sequelize.transaction();
+        const transaction = await c.var.app.sequelize.transaction();
         try {
-            const session = await this.getBgpSession(ctx, sessionUuid, transaction);
+            const session = await this.getBgpSession(c, sessionUuid, transaction);
             if (!session) {
                 await transaction.rollback();
-                return this.makeResponse(ctx, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
+                return this.makeResponse(c, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
             }
 
             // Reject requests are not belonging to this user
-            if (session.asn !== Number(ctx.state.asn)) {
+            if (session.asn !== Number(c.var.state.asn)) {
                 await transaction.rollback();
-                return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+                return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
             }
 
-            const url = await this.getRouterCallbackUrl(ctx, routerUuid, transaction);
+            const url = await this.getRouterCallbackUrl(c, routerUuid, transaction);
             if (!url) {
                 await transaction.rollback();
-                return this.makeResponse(ctx, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
+                return this.makeResponse(c, this.RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
             }
 
-            const response = await ctx.app.fetch.post(url, {
+            const response = await c.var.app.fetch.post(url, {
                 action,
                 session
             }, 'json');
@@ -370,24 +370,24 @@ export class SessionHandler extends BaseHandler {
             }
 
             if (action === 'delete') {
-                const rows = await ctx.models.bgpSessions.destroy({
+                const rows = await c.var.models.bgpSessions.destroy({
                     where: { uuid: sessionUuid },
                     transaction
                 });
                 if (rows !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
             } else {
-                const rows = await ctx.models.bgpSessions.update({ status: (action === 'enable' || action === 'approve') ? 1 : 0 }, { where: { uuid: sessionUuid }, transaction }) 
+                const rows = await c.var.models.bgpSessions.update({ status: (action === 'enable' || action === 'approve') ? 1 : 0 }, { where: { uuid: sessionUuid }, transaction }) 
                 if (rows[0] !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
             }
 
             await transaction.commit();
         } catch (error) {
             await transaction.rollback();
-            ctx.app.logger.getLogger('app').error(error);
-            return this.makeResponse(ctx, this.RESPONSE_CODE.ROUTER_OPERATION_FAILED);
+            c.var.app.logger.getLogger('app').error(error);
+            return this.makeResponse(c, this.RESPONSE_CODE.ROUTER_OPERATION_FAILED);
         }
 
-        return this.makeResponse(ctx, this.RESPONSE_CODE.OK);
+        return this.makeResponse(c, this.RESPONSE_CODE.OK);
     }
 
 }

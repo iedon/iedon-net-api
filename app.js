@@ -16,12 +16,14 @@ import { useDbContext } from './db/dbContext.js';
 import { useCore } from './providers/core/core.js';
 import { useRouter } from './routes.js';
 
+import fs from 'fs';
+
 import { Hono } from 'hono';
-const app  = new Hono();
 
-
-app.settings = localSettings;
-
+const app  = {
+  server: new Hono(),
+  settings: localSettings
+};
 
 (async () => {
 
@@ -30,22 +32,26 @@ app.settings = localSettings;
 
   if (localSettings.acorle.enabled) await initAcorle(app);
 
+  // Init dependencies
   useDbContext(app, app.settings.dbSettings);
   useMail(app, app.settings.mailSettings);
   useWhois(app, app.settings.whoisSettings);
   useFetch(app, app.settings.fetchSettings);
-  useCore(app, app.settings.tokenSettings);
-  useRouter(app);
 
+  // Init core middleware
+  useCore(app, app.settings.tokenSettings);
+
+  // Init handlers
+  useRouter(app, app.settings.handlers);
 })();
 
 
-const initAcorle = async (app) => {
+const initAcorle = async app => {
   const appLogger = app.logger.getLogger('app');
   const acorleLogger = app.logger.getLogger('acorle');
 
   const Acorle = await import('./acorle-sdk/acorleKoa.js');
-  app.use(Acorle.acorleKoa(app,
+  app.server.use(Acorle.acorleKoa(app,
     localSettings.acorle.centerServerUrl,
     localSettings.acorle.zone,
     localSettings.acorle.secret,
@@ -83,7 +89,15 @@ const initAcorle = async (app) => {
         localSettings.acorle.serviceName, false)
     ]);
   }
-}
+};
 
+const module = {
+  fetch: app.server.fetch,
+  port: localSettings.listen.port,
+  hostname: localSettings.hostname
+};
 
-export default app;
+if (localSettings.listen.type === 'unix') 
+  Object.assign(module, { unix: localSettings.listen.path });
+
+export default module;

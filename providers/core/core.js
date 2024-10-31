@@ -2,54 +2,99 @@ import { makeResponse, RESPONSE_CODE } from "../../common/packet.js";
 import { nullOrEmpty } from '../../common/helper.js';
 
 export async function useCore(app, tokenSettings = {}) {
-    const pn = `${tokenSettings.provider || 'default'}TokenProvider`;
-    const handlerName = pn.charAt(0).toUpperCase() + pn.slice(1);
-    app.token = new (await import(`./${pn}.js`))[handlerName](app, tokenSettings);
+  const providerName = tokenSettings.provider || 'default';
+  const handlerName = `${providerName.charAt(0).toUpperCase()}${providerName.slice(1)}TokenProvider`;
+  
+  try {
+    const { [handlerName]: TokenProvider } = await import(`./${providerName}TokenProvider.js`);
+    app.token = new TokenProvider(app, tokenSettings);
+  } catch (error) {
+    console.error(`Failed to load token provider: ${handlerName}`, error);
+    throw new Error(`Token provider ${handlerName} could not be loaded.`);
+  }
 
-    app.use(async (ctx, next) => {
+  app.server.use(async (c, next) => {
+    c.set('app', app);
 
-        ctx.set('X-Content-Type-Options', 'nosniff');
-        ctx.set('X-Download-Options', 'noopen');
-        ctx.set('X-Frame-Options', 'SAMEORIGIN');
-        ctx.set('X-XSS-Protection', '1; mode=block');
-        ctx.set('Pragma', 'no-cache');
-        ctx.set('Cache-Control', 'no-store,no-cache');
-        for (const header in app.settings.customHeaders) ctx.set(header, app.settings.customHeaders[header]);
+    setSecurityHeaders(c);
+    setCustomHeaders(c, app.settings.customHeaders);
 
-        // Set CORS where request is a preflight
-        if (ctx.request.method === 'OPTIONS') {
-            for (const header in app.settings.corsHeaders) ctx.set(header, app.settings.corsHeaders[header]);
-            ctx.status = 204;
-            return;
-        }
+    if (c.req.method === 'OPTIONS') {
+      handlePreflightRequest(c, app.settings.corsHeaders);
+      return c.text('');
+    }
 
-        if (ctx.request.method !== 'POST') return makeResponse(ctx, RESPONSE_CODE.METHOD_NOT_ALLOWED);
+    if (c.req.method !== 'POST') {
+      return makeResponse(c, RESPONSE_CODE.METHOD_NOT_ALLOWED);
+    }
 
-        // Skip token filter for public URLs
-        if (ctx.request.url === '/auth' || ctx.request.url === '/list') return await next();
+    try {
+      c.set('body', (await c.req.json()) || {});
+    } catch (error) {
+      // Bad request body / io error
+      return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+    }
 
-        // Verify token and set session state
-        if (nullOrEmpty(ctx.request.body.token)) return makeResponse(ctx, RESPONSE_CODE.UNAUTHORIZED);
-        const state = await app.token.verify(ctx.request.body.token);
-        if (!state) return makeResponse(ctx, RESPONSE_CODE.UNAUTHORIZED);
-        try {
-            if (nullOrEmpty(state.asn)) return makeResponse(ctx, RESPONSE_CODE.SERVER_ERROR);
-        } catch (error) {
-            app.logger.getLogger('app').error(error);
-            return makeResponse(ctx, RESPONSE_CODE.SERVER_ERROR);
-        }
-        ctx.state = state;
+    if (isPublicUrl(c.req.path)) {
+      await next();
+      return;
+    }
 
-        await next();
+    if (nullOrEmpty(c.var.body.token)) {
+      return makeResponse(c, RESPONSE_CODE.UNAUTHORIZED);
+    }
 
-        const nextToken = await ctx.app.token.generateToken({
-            asn: state.asn,
-            person: state.person
-        });
+    try {
+      const state = await verifyAndGetState(app, c.var.body.token);
+      if (!state) {
+        return makeResponse(c, RESPONSE_CODE.UNAUTHORIZED);
+      }
+      c.set('state', state);
 
-        if (nextToken) Object.assign(ctx.body, {
-            token: nextToken
-        });
+      await next();
 
-    });
+      const nextToken = await app.token.generateToken({
+        asn: state.asn,
+        person: state.person
+      });
+
+      if (nextToken) Object.assign(c.body, { token: nextToken });
+    } catch (error) {
+      app.logger.getLogger('app').error(error);
+      return makeResponse(c, RESPONSE_CODE.SERVER_ERROR);
+    }
+  });
+}
+
+function setSecurityHeaders(c) {
+  const headers = {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Download-Options': 'noopen',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'X-XSS-Protection': '1; mode=block',
+    'Pragma': 'no-cache',
+    'Cache-Control': 'no-store, no-cache'
+  };
+  Object.entries(headers).forEach(([key, value]) => c.header(key, value));
+}
+
+function setCustomHeaders(c, customHeaders) {
+  Object.entries(customHeaders).forEach(([key, value]) => c.header(key, value));
+}
+
+function handlePreflightRequest(c, corsHeaders) {
+  setCustomHeaders(c, corsHeaders);
+  c.status(204);
+}
+
+function isPublicUrl(url) {
+  return url === '/auth' || url === '/list';
+}
+
+async function verifyAndGetState(app, token) {
+  const state = await app.token.verify(token);
+  if (!state || nullOrEmpty(state.asn)) {
+    return null;
+  }
+  return state;
 }

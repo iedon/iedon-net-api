@@ -6,8 +6,13 @@
  */
 
 export default {
-
-    listenPort: 3000,
+    listen: {
+        type: 'unix', // 'tcp' or 'unix'
+        port: 3000,
+        path: '/var/run/peerapi.sock'
+    },
+    
+    hostname: 'localhost',
 
     handlers: [ 'admin', 'auth', 'list', 'ping', 'session', 'settings' ],
 

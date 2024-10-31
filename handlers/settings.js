@@ -5,30 +5,30 @@ export class SettingsHandler extends BaseHandler {
 
     constructor(app) {
         super(app);
-        this.app.post('/settings', async ctx => {
-            const action = ctx.request.body.action;
+        this.app.server.post('/settings', async c => {
+            const action = c.var.body.action;
             switch (action) {
-                case 'password': return await this.password(ctx);
-                default: return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
+                case 'password': return await this.password(c);
+                default: return this.makeResponse(c, this.RESPONSE_CODE.BAD_REQUEST);
             }
         });
     }
 
-    async password(ctx) {
+    async password(c) {
         let success = false;
         try {
             
             let password = null;
-            if (!nullOrEmpty(ctx.request.body.password) && typeof ctx.request.body.password === 'string') {
+            if (!nullOrEmpty(c.var.body.password) && typeof c.var.body.password === 'string') {
                 const salt = await bcryptGenSalt();
-                password = await bcryptGenHash(ctx.request.body.password.trim(), salt);
+                password = await bcryptGenHash(c.var.body.password.trim(), salt);
             }
 
             // Try insert new record
             try {
 
-                await ctx.models.peerPreferences.create({
-                    asn: Number(ctx.state.asn),
+                await c.var.models.peerPreferences.create({
+                    asn: Number(c.var.state.asn),
                     password
                 });
                 success = true;
@@ -36,21 +36,21 @@ export class SettingsHandler extends BaseHandler {
             } catch (error) {
                 // record exists, update it
                 if (error.name === 'SequelizeUniqueConstraintError') {
-                    await ctx.models.peerPreferences.update({ password }, {
+                    await c.var.models.peerPreferences.update({ password }, {
                         where: {
-                            asn: Number(ctx.state.asn)
+                            asn: Number(c.var.state.asn)
                         }
                     });
                     success = true;
                 } else {
-                    ctx.app.logger.getLogger('app').error(error);
+                    c.var.app.logger.getLogger('app').error(error);
                 }
             }
             
         } catch (error) {
-            ctx.app.logger.getLogger('app').error(error);
+            c.var.app.logger.getLogger('app').error(error);
         }
-        this.makeResponse(ctx, this.RESPONSE_CODE.OK, { success });
+        return this.makeResponse(c, this.RESPONSE_CODE.OK, { success });
     }
 
 }

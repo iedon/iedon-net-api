@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=YOUR_USER
+User=www-data
 WorkingDirectory=/opt/iedon/peerapi/
 ExecStart=bun run /opt/iedon/peerapi/app.js
 Restart=always
