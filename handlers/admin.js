@@ -39,8 +39,7 @@ const handlers = {
       };
 
       if (type === 'update') {
-        const rows = await c.var.app.models.posts.update(model, { where: { post_id: postId } });
-        if (rows[0] !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
+        await c.var.app.models.posts.update(model, { where: { post_id: postId } });
       } else if (type === 'add') {
         await c.var.app.models.posts.create(model);
       }
@@ -146,8 +145,7 @@ const handlers = {
       };
 
       if (type === 'update') {
-        const rows = await c.var.app.models.routers.update(model, { where: { uuid: router } });
-        if (rows[0] !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
+        await c.var.app.models.routers.update(model, { where: { uuid: router } });
       } else if (type === 'add') {
         await c.var.app.models.routers.create(model);
       }
