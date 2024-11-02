@@ -1,14 +1,15 @@
-import KoaRouter from 'koa-router'
-const _router = new KoaRouter()
+import adminHandler from './handlers/admin.js';
+import authHandler from './handlers/auth.js';
+import listHandler from './handlers/list.js';
+import tokenHandler from './handlers/token.js';
+import sessionHandler from './handlers/session.js';
+import settingsHandler from './handlers/settings.js';
 
-export async function useRouter(app) {
-    app._routeClasses={}
-    for (let i = 0; i < app.settings.handlers.length; i++) {
-        const h = app.settings.handlers[i];
-        if (h !== 'base') {
-            const handlerName = `${h.charAt(0).toUpperCase() + h.slice(1)}Handler`;
-            app._routeClasses[handlerName] = new (await import(`./handlers/${h}.js`))[handlerName](_router);
-        }
-    }
-    app.use(_router.routes(), _router.allowedMethods())
+export function registerRoutes(app) {
+  app.server.post('/admin', adminHandler)
+  .post('/auth', authHandler)
+  .get('/list/:type/:postId?', listHandler)
+  .get('/token', tokenHandler)
+  .post('/session', sessionHandler)
+  .post('/settings', settingsHandler);
 }

@@ -1,18 +1,27 @@
-import whois from 'whois-json';
+import whois from 'whois';
 
 export class DefaultWhoisProvider {
-    constructor(app, whoisSettings) {
-        this.app = app;
-        this.whoisSettings = whoisSettings;
-        this.logger = this.app.logger.getLogger('whois');
-    }
-
-    async lookup(domainName) {
-        try {
-            return await whois(domainName, this.whoisSettings.whois);
-        } catch (error) {
-            if (this.whoisSettings.logging) this.logger.error(error);
-            return null;
+  constructor(app, whoisSettings) {
+    this.app = app;
+    this.whoisSettings = whoisSettings;
+    this.logger = this.app.logger.getLogger('whois');
+    this._lookup = (name, settings) => new Promise((resolve, reject) =>
+      whois.lookup(name, settings, (error, data) => {
+        if (error) {
+          reject(error);
+          return;
         }
+        resolve(data);
+      })
+    );
+  }
+
+  async lookup(domainName) {
+    try {
+      return await this._lookup(domainName, this.whoisSettings.whois);
+    } catch (error) {
+      if (this.whoisSettings.logging) this.logger.error(error);
+      return null;
     }
+  }
 }

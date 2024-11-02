@@ -1,5 +1,11 @@
-export async function useLogger(app, loggerSettings={}) {
-    const pn = `${loggerSettings.provider || 'default'}LoggerProvider`;
-    const handlerName = pn.charAt(0).toUpperCase() + pn.slice(1);
-    app.logger = new (await import(`./${pn}.js`))[handlerName](app, loggerSettings);
-};
+export async function useLogger(app, loggerSettings = {}) {
+  const providerName = loggerSettings.provider || 'default';
+  const handlerName = `${providerName.charAt(0).toUpperCase()}${providerName.slice(1)}LoggerProvider`;
+
+  try {
+    const { [handlerName]: LoggerProvider } = await import(`./${providerName}LoggerProvider.js`);
+    app.logger = new LoggerProvider(app, loggerSettings);
+  } catch (error) {
+    console.error(`Logger provider ${handlerName} could not be loaded.`);
+  }
+}

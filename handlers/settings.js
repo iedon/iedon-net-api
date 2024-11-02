@@ -1,56 +1,50 @@
-import { BaseHandler } from "./base.js";
+import { makeResponse, RESPONSE_CODE } from "../common/packet.js";
 import { nullOrEmpty, bcryptGenSalt, bcryptGenHash } from "../common/helper.js";
 
-export class SettingsHandler extends BaseHandler {
-
-    constructor(router) {
-        super(router);
-        this.router.post('/settings', async (ctx, _) => {
-            const action = ctx.request.body.action;
-            switch (action) {
-                case 'password': return await this.password(ctx);
-                default: return this.makeResponse(ctx, this.RESPONSE_CODE.BAD_REQUEST);
-            }
-        });
-    }
-
-    async password(ctx) {
-        let success = false;
-        try {
-            
-            let password = null;
-            if (!nullOrEmpty(ctx.request.body.password) && typeof ctx.request.body.password === 'string') {
-                const salt = await bcryptGenSalt();
-                password = await bcryptGenHash(ctx.request.body.password.trim(), salt);
-            }
-
-            // Try insert new record
-            try {
-
-                await ctx.models.peerPreferences.create({
-                    asn: Number(ctx.state.asn),
-                    password
-                });
-                success = true;
-
-            } catch (error) {
-                // record exists, update it
-                if (error.name === 'SequelizeUniqueConstraintError') {
-                    await ctx.models.peerPreferences.update({ password }, {
-                        where: {
-                            asn: Number(ctx.state.asn)
-                        }
-                    });
-                    success = true;
-                } else {
-                    ctx.app.logger.getLogger('app').error(error);
-                }
-            }
-            
-        } catch (error) {
-            ctx.app.logger.getLogger('app').error(error);
-        }
-        this.makeResponse(ctx, this.RESPONSE_CODE.OK, { success });
-    }
-
+export default async function (c) {
+  const action = c.var.body.action;
+  switch (action) {
+    case 'password': return await password(c);
+    default: return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+  }
 }
+
+async function password(c) {
+  let success = false;
+  try {
+
+    let password = null;
+    if (!nullOrEmpty(c.var.body.password) && typeof c.var.body.password === 'string') {
+      const salt = await bcryptGenSalt();
+      password = await bcryptGenHash(c.var.body.password.trim(), salt);
+    }
+
+    // Try insert new record
+    try {
+
+      await c.var.app.models.peerPreferences.create({
+        asn: Number(c.var.state.asn),
+        password
+      });
+      success = true;
+
+    } catch (error) {
+      // record exists, update it
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        await c.var.app.models.peerPreferences.update({ password }, {
+          where: {
+            asn: Number(c.var.state.asn)
+          }
+        });
+        success = true;
+      } else {
+        c.var.app.logger.getLogger('app').error(error);
+      }
+    }
+
+  } catch (error) {
+    c.var.app.logger.getLogger('app').error(error);
+  }
+  return makeResponse(c, RESPONSE_CODE.OK, { success });
+}
+

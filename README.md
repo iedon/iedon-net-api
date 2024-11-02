@@ -1,14 +1,12 @@
-# IEDON-NET-API
+# IEDON-NET-API (Peer API for DN42)
 
-This is API server designed for iEdon-Net. Based on Koa.js.
+This is the API server designed for auto-peering for iEdon-Net and the DN42. Based on `Hono.js`.
 
 ## Structures
 
-This project is based on Koa's onion model which means all components and handlers are actually middlewares to extend a http server.
-
 - **```app.js```**: Entry point
 - **```routes.js```**: Define routes here
-- **```./handlers```**: Handlers for each defined route
+- **```./handlers```**: Handlers for each defined route in `routes.js`
 - **```providers```**: Extendable basic components
 - **```db```**: Sequelize Models and database context
 - **```common```**: shared functions
@@ -17,21 +15,20 @@ This project is based on Koa's onion model which means all components and handle
 ## Install
 
 ```bash
-npm install
+bun install
 cd acorle-sdk
-npm install
+bun install
 cp ./config.default.js ./config.js
 ```
 
 ## Run dev
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 ## Run prod
 
 ```bash
-npm install -g pm2
-npm run prod
+bun run prod
 ```

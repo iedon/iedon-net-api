@@ -1,14 +1,14 @@
 'use strict';
 
 import jwt from 'jsonwebtoken';
-const jwtSignAsync = (obj, secret, options) => new Promise((resolve, reject) => 
-    jwt.sign(obj, secret, options, (error, token) => {
-        if (error) {
-            reject(error);
-            return;
-        }
-        resolve(token);
-    })
+const jwtSignAsync = (obj, secret, options) => new Promise((resolve, reject) =>
+  jwt.sign(obj, secret, options, (error, token) => {
+    if (error) {
+      reject(error);
+      return;
+    }
+    resolve(token);
+  })
 );
 
 export const ResponseCodeType = {
@@ -49,15 +49,15 @@ const AcorleFieldEnum = {
 const DEFAULT_REG_INTERVAL_SECONDS = 30;
 const DEFAULT_CENTER_SERVER_URL = 'http://api.contoso.com';
 
-const defaultHttpRequestFunc = async (url, options={}) => {
+const defaultHttpRequestFunc = async (url, options = {}) => {
   const { timeout = 10000 } = options;
-  
+
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
 
   const response = await fetch(url, {
     ...options,
-    signal: controller.signal  
+    signal: controller.signal
   });
   clearTimeout(id);
 
@@ -151,7 +151,7 @@ export class AcorleClient {
         throw new Error(`HTTP Status: ${response.status}, RPC Status: ${data.code} (${data.message})`);
       }
       return data.data;
-    } catch(e) {
+    } catch (e) {
       throw new Error(`Invalid response received from center server. ${e}`);
     }
   }
@@ -196,7 +196,7 @@ export class AcorleClient {
 
     const rpcDestroyServiceRequest = { services: [] };
     keyUrlArray.forEach(e => {
-      rpcDestroyServiceRequest.services.push(      {
+      rpcDestroyServiceRequest.services.push({
         key: e.key.toLowerCase(),
         url: e.url
       })
@@ -272,7 +272,7 @@ export class AcorleClient {
     return false;
   }
 
-  async requestPeerService(key, payload, method=null, headers={}) {
+  async requestPeerService(key, payload, method = null, headers = {}) {
     const url = await this.callService(key);
     if (url === undefined || url === null || url === '') return null;
     const options = {

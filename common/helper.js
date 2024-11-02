@@ -4,58 +4,58 @@ import bcrypt from 'bcrypt';
 export function nullOrEmpty(obj) { return obj === undefined || obj === null || obj === ''; }
 
 export function signAsync(obj, secret, options) {
-    return new Promise((resolve, reject) => 
-        jwt.sign(obj, secret, options, (error, token) => {
-            if (error) {
-                reject(error);
-                return;
-            }
-            resolve(token);
-        })
-    );
+  return new Promise((resolve, reject) =>
+    jwt.sign(obj, secret, options, (error, token) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(token);
+    })
+  );
 }
 
 export function verifyAsync(token, secret, options) {
-    return new Promise((resolve, reject) =>
-        jwt.verify(token, secret, options, (error, decoded) => {
-            if (error) {
-                reject(error);
-                return;
-            }
-            resolve(decoded);
-        })
-    );
+  return new Promise((resolve, reject) =>
+    jwt.verify(token, secret, options, (error, decoded) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(decoded);
+    })
+  );
 }
 
 export function getRandomCode() {
-    return `DN42_VERIFICATION_${(Math.random() + 1).toString(36).substring(2)}${(Math.random() + 1).toString(36).substring(2)}`;
+  return `DN42_VERIFICATION_${(Math.random() + 1).toString(36).substring(2)}${(Math.random() + 1).toString(36).substring(2)}`;
 }
 
 export function bcryptGenSalt() {
-    return new Promise((resolve, reject) =>
-        bcrypt.genSalt(10, function(error, salt) {
-            if (error) reject(error);
-            resolve(salt);
-        })
-    );
+  return new Promise((resolve, reject) =>
+    bcrypt.genSalt(10, function (error, salt) {
+      if (error) reject(error);
+      resolve(salt);
+    })
+  );
 }
 
 export function bcryptGenHash(text, salt) {
-    return new Promise((resolve, reject) =>
-        bcrypt.hash(text, salt, function(error, hash) {
-            if (error) reject(error);
-            resolve(hash);
-        })
-    );
+  return new Promise((resolve, reject) =>
+    bcrypt.hash(text, salt, function (error, hash) {
+      if (error) reject(error);
+      resolve(hash);
+    })
+  );
 }
 
 export function bcryptCompare(text, hash) {
-    return new Promise((resolve, reject) =>
-        bcrypt.compare(text, hash, function(error, result) {
-            if (error) reject(error);
-            resolve(result);
-        })
-    );
+  return new Promise((resolve, reject) =>
+    bcrypt.compare(text, hash, function (error, result) {
+      if (error) reject(error);
+      resolve(result);
+    })
+  );
 }
 
 export const IPV4_REGEX = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}$/;
