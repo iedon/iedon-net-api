@@ -22,7 +22,14 @@ export class DefaultSshAuthServerProvider {
       this.hosyKeys = [];
       for (const path of this.sshAuthServerSettings.ssh2.hostKeysPath) {
         readFile(path, 'utf-8', (err, data) => {
-          if (err) reject(err);
+          if (err) {
+            reject(err);
+            return;
+          }
+          if (data === undefined) {
+            reject('Key file not found.');
+            return;
+          }
           const _data = data.trim();
           if (_data) this.hosyKeys.push(_data);
           resolve();
