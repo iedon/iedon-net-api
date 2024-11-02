@@ -13,6 +13,7 @@ import { useMail } from './providers/mail/mail.js';
 import { useWhois } from './providers/whois/whois.js';
 import { useFetch } from './providers/fetch/fetch.js'
 import { useToken } from './providers/token/token.js';
+import { useSshAuthServer } from './providers/ssh/sshAuthServer.js';
 import { useDbContext } from './db/dbContext.js';
 
 import { registerRoutes } from './routes.js';
@@ -50,7 +51,8 @@ registerRoutes(app);
       useMail(app, app.settings.mailSettings),
       useWhois(app, app.settings.whoisSettings),
       useFetch(app, app.settings.fetchSettings),
-      useToken(app, app.settings.tokenSettings)
+      useToken(app, app.settings.tokenSettings),
+      useSshAuthServer(app, app.settings.sshAuthServerSettings),
     ]);
 
     app.ready = true;

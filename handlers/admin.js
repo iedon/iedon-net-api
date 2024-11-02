@@ -14,7 +14,7 @@ export default async function (c) {
   }
 
   const action = c.var.body.action;
-  return this[action] ? await handlers[action](c) : makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+  return handlers[action] ? await handlers[action](c) : makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
 }
 
 const handlers = {
@@ -229,19 +229,19 @@ const handlers = {
   },
 
   async approveSession(c) {
-    return await simpleActionHandler(c, 'approve');
+    return await handlers.simpleActionHandler(c, 'approve');
   },
 
   async deleteSession(c) {
-    return await simpleActionHandler(c, 'delete');
+    return await handlers.simpleActionHandler(c, 'delete');
   },
 
   async enableSession(c) {
-    return await simpleActionHandler(c, 'enable');
+    return await handlers.simpleActionHandler(c, 'enable');
   },
 
   async disableSession(c) {
-    return await simpleActionHandler(c, 'disable');
+    return await handlers.simpleActionHandler(c, 'disable');
   },
 
   async querySession(c) {
@@ -251,12 +251,12 @@ const handlers = {
     const routerUuid = c.var.body.router;
     if (nullOrEmpty(routerUuid) || typeof routerUuid !== 'string') return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
 
-    const session = await getBgpSession(c, sessionUuid);
+    const session = await handlers.getBgpSession(c, sessionUuid);
     if (!session) return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
 
     if (session.status < 1) return makeResponse(c, RESPONSE_CODE.OK, '');
 
-    const url = await getRouterCallbackUrl(c, routerUuid);
+    const url = await handlers.getRouterCallbackUrl(c, routerUuid);
     if (!url) return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
 
     const response = await c.var.app.fetch.post(url, {
@@ -320,13 +320,13 @@ const handlers = {
     const transaction = await c.var.app.sequelize.transaction();
     try {
 
-      const url = await getRouterCallbackUrl(c, routerUuid, transaction);
+      const url = await handlers.getRouterCallbackUrl(c, routerUuid, transaction);
       if (!url) {
         await transaction.rollback();
         return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
       }
 
-      const session = await getBgpSession(c, sessionUuid, transaction);
+      const session = await handlers.getBgpSession(c, sessionUuid, transaction);
       if (!session) {
         await transaction.rollback();
         return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);

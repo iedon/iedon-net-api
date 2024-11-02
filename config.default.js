@@ -61,6 +61,13 @@ export default {
           compress: true,
           numBackups: 7,
           keepFileExt: true
+        },
+        ssh: {
+          type: 'dateFile',
+          filename: './logs/ssh/ssh.log',
+          compress: true,
+          numBackups: 7,
+          keepFileExt: true
         }
       },
       categories: {
@@ -95,6 +102,10 @@ export default {
         auth: {
           level: 'info',
           appenders: ['auth']
+        },
+        ssh: {
+          level: 'info',
+          appenders: ['ssh']
         }
       }
     }
@@ -121,6 +132,23 @@ export default {
     stateSignOptions: {
       algorithm: 'HS256',
       expiresIn: '10m'    // where sign-in state(via mail, pgp, ssh) expires
+    }
+  },
+
+  sshAuthServerSettings: { // This app will starts a ssh server to accept connections to auth with us
+    provider: 'default',
+    challengeHint: 'ssh iedon.net -p 4222',
+    ssh2: {
+      listen: {
+        type: 'tcp', // tcp or unix
+        port: 4222,
+        hostname: 'localhost',
+        path: '/var/run/peerapi-ssh.sock' // unix domain socket
+      },
+      hostKeysPath: [
+        '/etc/ssh/ssh_host_rsa_key'
+      ],
+      timeoutSeconds: 120
     }
   },
 
@@ -161,7 +189,7 @@ export default {
   },
 
   whoisSettings: {
-    provider: 'default',    // default provider is using whois-json package and takes whois configuration section bellow
+    provider: 'default',    // default provider is using whois package and takes whois configuration section bellow
     logging: true,
     whois: {
       server: 'whois.dn42',        // this can be a string ("host:port") or an object with host and port as its keys; leaving it empty makes lookup rely on servers.json
@@ -209,14 +237,17 @@ export default {
     }
   },
 
-  // Configure CORS headers and your custom headers here
-  corsHeaders: {
+  // Configure CORS, preflight headers and custom headers here
+  preflightHeaders: {
     'Access-Control-Request-Method': 'POST',
-    'Access-Control-Request-Headers': 'X-PINGOTHER, Content-Type, Authorization',
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Request-Headers': 'X-PINGOTHER, Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'X-PeerAPI-Version, Content-Type',
     'Access-Control-Max-Age': '86400'
+  },
+
+  corsHeaders: {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'X-PeerAPI-Version, Content-Type, Authorization'
   },
 
   customHeaders: {

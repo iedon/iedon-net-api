@@ -2,7 +2,6 @@ import { makeResponse, RESPONSE_CODE } from "../common/packet.js";
 import { nullOrEmpty, signAsync, verifyAsync, getRandomCode, bcryptCompare, ASN_MIN, ASN_MAX, MAIL_REGEX } from "../common/helper.js";
 
 import openpgp from 'openpgp';
-import sshpk from 'sshpk';
 
 /*
     "REQUEST": {
@@ -65,6 +64,13 @@ export default async function (c) {
   }
 }
 
+const SupportedAuthType = {
+  PASSWORD: 0,
+  PGP_ASCII_ARMORED_CLEAR_SIGN: 1,
+  SSH_SERVER_AUTH: 2,
+  EMAIL: 3
+};
+
 function checkAsn(asn) {
   if (nullOrEmpty(asn)) return false;
   const _asn = Number(asn);
@@ -83,6 +89,75 @@ async function query(c) {
     }
   }
 
+  const findAndAddAuthMethods = async (whoisData) => {
+    const person = whoisData.person?.trim() || '';
+
+    const addAuthMethod = (type, data) => {
+      addAuthMethods({
+        id: availableAuthMethods.length,
+        type,
+        data: data.trim().toLowerCase(),
+      });
+    };
+
+    if (c.var.app.settings.mailSettings.enableLoginByMail) {
+      const possibleEmailEntries = ['contact', 'e-mail', 'email', 'mail'];
+
+      for (const key of possibleEmailEntries) {
+        const values = Array.isArray(whoisData[key])
+          ? whoisData[key]
+          : whoisData[key]
+            ? [whoisData[key]]
+            : [];
+
+        for (const value of values) {
+          const matches = value.trim().toLowerCase().match(MAIL_REGEX);
+          if (matches) matches.forEach((mail) => addAuthMethod(SupportedAuthType.EMAIL, mail));
+        }
+      }
+    }
+
+    const pgpFingerprints = Array.isArray(whoisData['pgp-fingerprint'])
+      ? whoisData['pgp-fingerprint']
+      : whoisData['pgp-fingerprint']
+        ? [whoisData['pgp-fingerprint']]
+        : [];
+
+    pgpFingerprints.forEach(fingerprint => {
+      if (fingerprint.trim()) {
+        addAuthMethod(SupportedAuthType.PGP_ASCII_ARMORED_CLEAR_SIGN, fingerprint);
+      }
+    });
+
+    const authEntries = Array.isArray(whoisData.auth)
+      ? whoisData.auth
+      : whoisData.auth
+        ? [whoisData.auth]
+        : [];
+
+    for (const auth of authEntries) {
+      const splits = auth.trim().split('\x20');
+
+      for (let i = 0; i < splits.length; i++) {
+        const entry = splits[i].trim();
+
+        if (entry === 'pgp-fingerprint' && splits[i + 1]) {
+          addAuthMethod(SupportedAuthType.PGP_ASCII_ARMORED_CLEAR_SIGN, splits[i + 1]);
+          break;
+        } else if (entry.includes('ssh') && splits[i + 1]) {
+          addAuthMethod(SupportedAuthType.SSH_SERVER_AUTH, auth.trim());
+          break;
+        }
+      }
+    }
+
+    return {
+      person,
+      adminC: whoisData['admin-c'],
+      mntBy: whoisData['mnt-by'],
+    };
+  };
+
   const originalHash = await c.var.app.models.peerPreferences.findOne({
     attributes: ['password'],
     where: {
@@ -92,87 +167,40 @@ async function query(c) {
 
   if (originalHash && originalHash.dataValues.password) addAuthMethods({
     id: availableAuthMethods.length,
-    type: 'password'
+    type: SupportedAuthType.PASSWORD
   });
 
-  let person = '';
-  const asnWhois = await c.var.app.whois.lookup(`AS${asn}`);
-  if (asnWhois && !nullOrEmpty(asnWhois.adminC) && typeof asnWhois.adminC === 'string') {
-    // Scan admin-c person
-    const adminCWhois = await c.var.app.whois.lookup(asnWhois.adminC);
-    if (adminCWhois) {
+  let _person = '';
+  try {
+    const asnWhois = await c.var.app.whois.lookup(`AS${asn}`);
+    const { person, adminC, mntBy } = await findAndAddAuthMethods(parseWhois(asnWhois));
+    _person = person;
 
-      if (!nullOrEmpty(adminCWhois.person) && typeof adminCWhois.person === 'string') person = adminCWhois.person.trim();
+    const _adminCArr = typeof adminC === 'string' ? [adminC] : Array.isArray(adminC) ? adminC : [];
+    const _mntByArr = typeof mntBy === 'string' ? [mntBy] : Array.isArray(mntBy) ? mntBy : [];
 
-      if (c.var.app.settings.mailSettings.enableLoginByMail) {
-        // Scan entry 'contact' in admin-c for e-mail address
-        const possibleEmailEntries = ['contact', 'eMail', 'mail'];
-        possibleEmailEntries.forEach(key => {
-          if (!nullOrEmpty(adminCWhois[key]) && typeof adminCWhois[key] === 'string') {
-            const matches = adminCWhois[key].trim().toLowerCase().match(MAIL_REGEX);
-            if (matches) matches.forEach(mail => {
-              addAuthMethods({
-                id: availableAuthMethods.length,
-                type: 'e-mail',
-                data: mail
-              });
-            });
-          }
-        });
+    const lookup = async arr => {
+      for (const item of arr) {
+        const { person } = await findAndAddAuthMethods(parseWhois(await c.var.app.whois.lookup(item)));
+        if (person) _person = person;
       }
+    };
 
-      // Scan entry 'pgp-fingerprint' in admin-c for pgp-fingerprint
-      if (!nullOrEmpty(adminCWhois['pgp-fingerprint']) && typeof adminCWhois['pgp-fingerprint'] === 'string') {
-        addAuthMethods({
-          id: availableAuthMethods.length,
-          type: 'pgp-fingerprint',
-          data: adminCWhois['pgp-fingerprint'].trim().toLowerCase()
-        });
-      }
+    // Run both lookups in parallel using Promise.all()
+    await Promise.all([lookup(_adminCArr), lookup(_mntByArr)]);
 
-      // Scan admin-c's mntner
-      if (!nullOrEmpty(adminCWhois.mntBy) && typeof adminCWhois.mntBy === 'string') {
-        const mntByWhois = await c.var.app.whois.lookup(adminCWhois.mntBy);
-        if (mntByWhois) {
-          // Scan entry 'auth'
-          if (!nullOrEmpty(mntByWhois.auth) && typeof mntByWhois.auth === 'string') {
-            const splits = mntByWhois.auth.trim().split('\x20');
-            for (let i = 0; i < splits.length; i++) {
-              try {
-                const entry = splits[i].trim();
-                if (entry === 'pgp-fingerprint') {
-                  addAuthMethods({
-                    id: availableAuthMethods.length,
-                    type: 'pgp-fingerprint',
-                    data: splits[i + 1].trim().toLowerCase()
-                  });
-                  continue;
-                }
-                if (entry.startsWith('ssh-')) {
-                  addAuthMethods({
-                    id: availableAuthMethods.length,
-                    type: entry,
-                    data: splits[i + 1].trim()
-                  });
-                  continue;
-                }
-              } catch {
-                // Dismiss index out of bounds exception for irregular entries
-                continue;
-              }
-            }
-          }
-        }
-      }
-    }
+  } catch (error) {
+    c.var.app.logger.getLogger('app').error(`Error during ASN lookup or processing: ${error.message}`, error);
   }
+
+  if (_person === '') _person = `AS${asn}`;
 
   let authState = '';
   try {
     authState = await signAsync(
       {
         asn,
-        person,
+        person: _person,
         availableAuthMethods
       },
       c.var.app.settings.authHandler.stateSignSecret,
@@ -182,7 +210,7 @@ async function query(c) {
     c.var.app.logger.getLogger('app').error(error);
   }
   return makeResponse(c, RESPONSE_CODE.OK, {
-    person,
+    person: _person,
     authState,
     availableAuthMethods
   });
@@ -214,15 +242,18 @@ async function request(c) {
 
   let authChallenge = '';
   authState.code = getRandomCode();
-  if (authMethod.type === 'password') {
+  if (authMethod.type === SupportedAuthType.PASSWORD) {
     authChallenge = authState.asn;
-  } else if (authMethod.type === 'e-mail') {
+  } else if (authMethod.type === SupportedAuthType.EMAIL) {
     authChallenge = c.var.app.settings.mailSettings.senderEmailAddress;
     await c.var.app.mail.send(authMethod.data,
       'Authentication Code',
       `Hi ${authState.person || authState.asn},\r\nThis is your challenge code: ${authState.code}\r\n\r\nYou've received this mail because you are authenticating with us.\r\nDo not reply this mail. It is sent automatically.\r\n\r\nHave a nice day!\r\n`);
-  } else if (authMethod.type === 'pgp-fingerprint' || authMethod.type.startsWith('ssh-')) {
+  } else if (authMethod.type === SupportedAuthType.PGP_ASCII_ARMORED_CLEAR_SIGN) {
     authChallenge = authState.code;
+  } else if (authMethod.type === SupportedAuthType.SSH_SERVER_AUTH) {
+    authChallenge = c.var.app.settings.sshAuthServerSettings.challengeHint || 'Connect to our server using SSH Client';
+    c.var.app.ssh.addAuthInfo(authState.asn, authMethod.data.trim(), authState.code);
   }
 
   try {
@@ -266,8 +297,7 @@ async function challenge(c) {
   const type = authState.authMethod.type;
   const code = authState.code;
 
-  if (type === 'password') {
-
+  if (type === SupportedAuthType.PASSWORD) {
     if (nullOrEmpty(authData) || typeof authData !== 'string') return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     const rawPassword = authData.trim();
     try {
@@ -282,63 +312,42 @@ async function challenge(c) {
       c.var.app.logger.getLogger('app').error(error);
     }
 
-  } else if (type === 'e-mail') {
+  } else if (type === SupportedAuthType.EMAIL) {
 
     if (nullOrEmpty(authData) || typeof authData !== 'string') return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     if (authData.trim() === code) authResult = true;
 
-  } else if (type === 'pgp-fingerprint') {
+  } else if (type === SupportedAuthType.PGP_ASCII_ARMORED_CLEAR_SIGN) {
 
     if (!authData || !authData.publicKey || typeof authData.publicKey !== 'string' ||
-      !authData.signedMessage || typeof authData.signedMessage !== 'string' ||
-      authData.signedMessage.indexOf(code) === -1) {
+      !authData.signedMessage || typeof authData.signedMessage !== 'string') {
       return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     }
 
-    try {
-      const publicKey = await openpgp.readKey({
-        armoredKey: authData.publicKey.trim()
-      });
-      if (publicKey.getFingerprint() !== authState.authMethod.data) throw new Error('Invalid public key');
+    if (authData.signedMessage.indexOf(code) !== -1) {
+      try {
+        const publicKey = await openpgp.readKey({
+          armoredKey: authData.publicKey.trim()
+        });
+        if (publicKey.getFingerprint() !== authState.authMethod.data) throw new Error('Invalid public key');
 
-      const signedMessage = await openpgp.readCleartextMessage({
-        cleartextMessage: authData.signedMessage.trim()
-      });
-      const { verified } = (await openpgp.verify({
-        message: signedMessage,
-        verificationKeys: publicKey
-      })).signatures[0];
+        const signedMessage = await openpgp.readCleartextMessage({
+          cleartextMessage: authData.signedMessage.trim()
+        });
+        const { verified } = (await openpgp.verify({
+          message: signedMessage,
+          verificationKeys: publicKey
+        })).signatures[0];
 
-      authResult = await verified; // throws on invalid signature
+        authResult = await verified; // throws on invalid signature
 
-    } catch {
-      // supress invalid signature exception
+      } catch {
+        // supress invalid signature exception
+      }
     }
-
-  } else if (type.startsWith('ssh-')) {
-
-    if (nullOrEmpty(authData) || typeof authData !== 'string' || authData.indexOf(code) === -1) {
-      return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
-    }
-
-    try {
-      const key = sshpk.parseKey(`${authState.authMethod.type} ${authState.authMethod.data}`, 'ssh');
-      const publicKey = await openpgp.readKey({
-        armoredKey: key.toString('pkcs8')
-      });
-
-      const signedMessage = await openpgp.readCleartextMessage({
-        cleartextMessage: authData.signedMessage.trim()
-      });
-      const { verified } = (await openpgp.verify({
-        message: signedMessage,
-        verificationKeys: publicKey
-      })).signatures[0];
-
-      authResult = await verified; // throws on invalid signature
-    } catch {
-      // Supress invalid key or signature excpetions
-    }
+  } else if (type === SupportedAuthType.SSH_SERVER_AUTH) {
+    if (nullOrEmpty(authData) || typeof authData !== 'string') return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+    if (authData.trim() === code) authResult = true;
   }
 
   if (authResult) token = await c.var.app.token.generateToken({
@@ -346,9 +355,43 @@ async function challenge(c) {
     person: authState.person
   });
 
-  // This is special case we should manually append token to body because this route('/path') will not pass through core middleware.
-  // And this is the first time the user gets a token
-  makeResponse(c, RESPONSE_CODE.OK, { authResult });
-  Object.assign(c.body, { token });
+  return makeResponse(c, RESPONSE_CODE.OK, { authResult, token });
 }
 
+function parseWhois(whoisText) {
+  // Split the WHOIS text by new lines
+  const lines = whoisText.split('\n');
+
+  // Initialize an object to store the parsed data
+  const parsedData = {};
+
+  // Iterate through each line
+  lines.forEach(line => {
+    // Trim any leading/trailing whitespace
+    line = line.trim();
+
+    // Skip comments (lines starting with %)
+    if (line.startsWith('%') || line === '') {
+      return;
+    }
+
+    // Split the line into key and value by the first occurrence of ":"
+    const [key, ...valueParts] = line.split(':');
+
+    // Join the value parts back together and trim any extra spaces
+    const value = valueParts.join(':').trim();
+
+    // If the key already exists in the parsedData, convert it into an array (to handle multiple values for the same key)
+    if (parsedData[key]) {
+      if (Array.isArray(parsedData[key])) {
+        parsedData[key].push(value);
+      } else {
+        parsedData[key] = [parsedData[key], value];
+      }
+    } else {
+      parsedData[key] = value;
+    }
+  });
+
+  return parsedData;
+}

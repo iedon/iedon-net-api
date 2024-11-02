@@ -6,6 +6,7 @@ export function entryMiddleware(app) {
     c.set('app', app);
 
     setSecurityHeaders(c);
+    setCustomHeaders(c, app.settings.corsHeaders);
     setCustomHeaders(c, app.settings.customHeaders);
 
     if (!app.ready) {
@@ -13,7 +14,7 @@ export function entryMiddleware(app) {
     }
 
     if (c.req.method === 'OPTIONS') {
-      return handlePreflightRequest(c, app.settings.corsHeaders);
+      return handlePreflightRequest(c, app.settings.preflightHeaders);
     }
 
     if (c.req.method === 'POST') {
@@ -66,8 +67,8 @@ function setCustomHeaders(c, customHeaders) {
   Object.entries(customHeaders).forEach(([key, value]) => c.header(key, value));
 }
 
-function handlePreflightRequest(c, corsHeaders) {
-  setCustomHeaders(c, corsHeaders);
+function handlePreflightRequest(c, preflightHeaders) {
+  setCustomHeaders(c, preflightHeaders);
   c.status(204);
   return c.text('');
 }

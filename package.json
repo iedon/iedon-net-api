@@ -17,7 +17,7 @@
     "openpgp": "^5.11.2",
     "sequelize": "^7.0.0-alpha.4",
     "sqlite3": "^5.1.7",
-    "sshpk": "^1.18.0",
-    "whois-json": "^2.0.4"
+    "ssh2": "^1.16.0",
+    "whois": "^2.14.2"
   }
 }
