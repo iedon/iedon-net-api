@@ -93,8 +93,7 @@ export class DefaultSshAuthServerProvider {
                   if (!allowedPubKey.verify(ctx.blob, ctx.signature, ctx.hashAlgo)) return ctx.reject();
                 }
                 authenticated = { ...v };
-                this.authInfo.delete(k);
-                this.app.logger.getLogger('auth').info(`${k} - SSH Authentication successful with method: ${ctx.method}, algorithm: ${ctx.key.algo}, service: ${ctx.service}`);
+                this.app.logger.getLogger('auth').info(`AS${k} - SSH Authentication successful with method: ${ctx.method}, algorithm: ${ctx.key.algo}, service: ${ctx.service}`);
                 accepted = true;
                 return ctx.accept();
               }
@@ -113,9 +112,9 @@ export class DefaultSshAuthServerProvider {
             session.once('shell', acceptShell => {
               const stream = acceptShell();
               stream.write('\r\n');
-              stream.write('========================================\r\n');
-              stream.write('Welcome to the SSH Auth Server!\r\n');
-              stream.write('========================================\r\n');
+              this.sshAuthServerSettings.ssh2.bannerText.forEach(t => {
+                stream.write(`${t}\r\n`);
+              });
               stream.write('\r\n\r\n');
               stream.write(authenticated ? `>> Your challenge code is:\r\n\t${authenticated.challengeText}\r\n\r\n` : '>> You have nothing to do here.\r\n\r\n');
               stream.write('\r\n');

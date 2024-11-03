@@ -351,6 +351,7 @@ async function challenge(c) {
     authMethod = 'ssh';
     if (nullOrEmpty(authData) || typeof authData !== 'string') return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     if (authData.trim() === code) authResult = true;
+    c.var.app.ssh.removeAuthInfo(authState.asn);
   }
 
   if (authResult) {

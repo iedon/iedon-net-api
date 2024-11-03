@@ -148,7 +148,12 @@ export default {
       hostKeysPath: [
         '/etc/ssh/ssh_host_rsa_key'
       ],
-      timeoutSeconds: 120
+      timeoutSeconds: 120,
+      bannerText: [
+        '========================================',
+        'Welcome to the iEdon PeerAPI DN42 Auth Server!',
+        '========================================',
+      ]
     }
   },
 
