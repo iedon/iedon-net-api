@@ -10,6 +10,7 @@ export class DefaultSshAuthServerProvider {
 
     this.hosyKeys = [];
     this.authInfo = new Map();
+
     this.loadKeys().then(() => {
       this.sshServer = this.startServer();
     }).catch(err => {
@@ -17,24 +18,34 @@ export class DefaultSshAuthServerProvider {
     });
   }
 
-  loadKeys() {
+  readFileAsync(path) {
     return new Promise((resolve, reject) => {
+      readFile(path, 'utf-8', (err, data) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        if (data === undefined) {
+          reject(`File is empty or unable to read: ${path}`);
+          return;
+        }
+        resolve(data);
+      });
+    });
+  }
+
+  loadKeys() {
+    return new Promise(async resolve => {
       this.hosyKeys = [];
       for (const path of this.sshAuthServerSettings.ssh2.hostKeysPath) {
-        readFile(path, 'utf-8', (err, data) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          if (data === undefined) {
-            reject('Key file not found.');
-            return;
-          }
-          const _data = data.trim();
-          if (_data) this.hosyKeys.push(_data);
-          resolve();
-        });
+        try {
+          const data = (await this.readFileAsync(path)).trim();
+          if (data) this.hosyKeys.push(data);
+        } catch (error) {
+          this.logger.error(error);
+        }
       }
+      resolve();
     });
   }
 
@@ -53,18 +64,18 @@ export class DefaultSshAuthServerProvider {
     this.authInfo.delete(asn);
   }
 
-  startServer() {
-    const checkValue = (input, allowed) => {
-      const autoReject = (input.length !== allowed.length);
-      if (autoReject) {
-        // Prevent leaking length information by always making a comparison with the
-        // same input when lengths don't match what we expect ...
-        allowed = input;
-      }
-      const isMatch = timingSafeEqual(input, allowed);
-      return (!autoReject && isMatch);
-    };
+  checkValue(input, allowed) {
+    const autoReject = (input.length !== allowed.length);
+    if (autoReject) {
+      // Prevent leaking length information by always making a comparison with the
+      // same input when lengths don't match what we expect ...
+      allowed = input;
+    }
+    const isMatch = timingSafeEqual(input, allowed);
+    return (!autoReject && isMatch);
+  }
 
+  startServer() {
     const sshServer = new ssh2.Server({
       hostKeys: this.hosyKeys
     }, client => {
@@ -77,24 +88,24 @@ export class DefaultSshAuthServerProvider {
           for (const [k, v] of this.authInfo) {
             try {
               if (ctx.key.algo === v.publicKey.type &&
-                checkValue(ctx.key.data, v.publicKey.getPublicSSH())) {
+                this.checkValue(ctx.key.data, v.publicKey.getPublicSSH())) {
                 if (ctx.signature) {
                   if (!allowedPubKey.verify(ctx.blob, ctx.signature, ctx.hashAlgo)) return ctx.reject();
                 }
                 authenticated = { ...v };
                 this.authInfo.delete(k);
-                this.logger.info(`Authentication successful(${k}) with method: ${ctx.method}, algorithm: ${ctx.key.algo}, service: ${ctx.service}`);
+                this.app.logger.getLogger('auth').info(`${k} - SSH Authentication successful with method: ${ctx.method}, algorithm: ${ctx.key.algo}, service: ${ctx.service}`);
                 accepted = true;
                 return ctx.accept();
               }
             } catch (error) {
               this.logger.error(error);
-              return ctx.reject();
+              return ctx.reject(["publickey"]);
             }
           }
         }
 
-        return ctx.reject();
+        return ctx.reject(["publickey"]);
       })
         .on('ready', () => {
           client.on('session', acceptSession => {
@@ -117,7 +128,7 @@ export class DefaultSshAuthServerProvider {
                 if (input === 'q' || input === 'quit' || input === 'exit') disconnect();
               });
 
-              let tick = 10; // this.sshAuthServerSettings.ssh2.timeoutSeconds;
+              let tick = this.sshAuthServerSettings.ssh2.timeoutSeconds;
               let intervalHandler = null;
               const disconnect = () => {
                 if (intervalHandler) {

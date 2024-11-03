@@ -96,7 +96,7 @@ async function query(c) {
       addAuthMethods({
         id: availableAuthMethods.length,
         type,
-        data: data.trim().toLowerCase(),
+        data: type === SupportedAuthType.EMAIL ? data.trim().toLowerCase() : data.trim(),
       });
     };
 
@@ -294,10 +294,12 @@ async function challenge(c) {
 
   let authResult = false;
   let token = '';
+  let authMethod = '';
   const type = authState.authMethod.type;
   const code = authState.code;
 
   if (type === SupportedAuthType.PASSWORD) {
+    authMethod = 'password';
     if (nullOrEmpty(authData) || typeof authData !== 'string') return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     const rawPassword = authData.trim();
     try {
@@ -313,12 +315,12 @@ async function challenge(c) {
     }
 
   } else if (type === SupportedAuthType.EMAIL) {
-
+    authMethod = 'e-mail';
     if (nullOrEmpty(authData) || typeof authData !== 'string') return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     if (authData.trim() === code) authResult = true;
 
   } else if (type === SupportedAuthType.PGP_ASCII_ARMORED_CLEAR_SIGN) {
-
+    authMethod = 'pgp';
     if (!authData || !authData.publicKey || typeof authData.publicKey !== 'string' ||
       !authData.signedMessage || typeof authData.signedMessage !== 'string') {
       return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
@@ -329,7 +331,7 @@ async function challenge(c) {
         const publicKey = await openpgp.readKey({
           armoredKey: authData.publicKey.trim()
         });
-        if (publicKey.getFingerprint() !== authState.authMethod.data) throw new Error('Invalid public key');
+        if (publicKey.getFingerprint().toLowerCase() !== authState.authMethod.data.toLowerCase()) throw new Error('Invalid public key');
 
         const signedMessage = await openpgp.readCleartextMessage({
           cleartextMessage: authData.signedMessage.trim()
@@ -346,14 +348,18 @@ async function challenge(c) {
       }
     }
   } else if (type === SupportedAuthType.SSH_SERVER_AUTH) {
+    authMethod = 'ssh';
     if (nullOrEmpty(authData) || typeof authData !== 'string') return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     if (authData.trim() === code) authResult = true;
   }
 
-  if (authResult) token = await c.var.app.token.generateToken({
-    asn: authState.asn,
-    person: authState.person
-  });
+  if (authResult) {
+    token = await c.var.app.token.generateToken({
+      asn: authState.asn,
+      person: authState.person
+    });
+    c.var.app.logger.getLogger('auth').info(`AS${asn} - Authentication successful via ${authMethod || '<Unknown>'}.`);
+  }
 
   return makeResponse(c, RESPONSE_CODE.OK, { authResult, token });
 }
