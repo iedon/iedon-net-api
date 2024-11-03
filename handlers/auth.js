@@ -358,7 +358,7 @@ async function challenge(c) {
       asn: authState.asn,
       person: authState.person
     });
-    c.var.app.logger.getLogger('auth').info(`AS${asn} - Authentication successful via ${authMethod || '<Unknown>'}.`);
+    c.var.app.logger.getLogger('auth').info(`AS${authState.asn} - Authentication successful via ${authMethod || '<Unknown>'}.`);
   }
 
   return makeResponse(c, RESPONSE_CODE.OK, { authResult, token });
