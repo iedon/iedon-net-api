@@ -5,7 +5,7 @@
  * ===========================
  */
 
-import pkg from './package.json' assert { type: 'json' };
+import pkg from './package.json' with { type: "json" };
 import localSettings from './config.js';
 
 import { useLogger } from './providers/logger/logger.js';
