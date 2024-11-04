@@ -1,5 +1,4 @@
 import { readFile } from 'fs';
-import { timingSafeEqual } from 'crypto';
 import ssh2 from 'ssh2';
 
 export class DefaultSshAuthServerProvider {
@@ -49,61 +48,74 @@ export class DefaultSshAuthServerProvider {
     });
   }
 
-  addAuthInfo(asn, publicKey, challengeText) {
+  setSshAuthInfo(asn, publicKey, challengeText) {
+    /*
+     <'publicKey', {
+      parsed: parsedKey
+      asnMap: <'asn', {
+        'challengeText',
+        date
+      }>
+     }>
+    */
     try {
-      this.authInfo.set(asn, {
-        publicKey: ssh2.utils.parseKey(publicKey),
-        challengeText
+      const split = publicKey.split('\x20');
+      const trimmed = `${split[0].toLowerCase()} ${split[1]}`;
+      let obj = this.authInfo.get(trimmed);
+      if (!obj) {
+        obj = {
+          parsed: ssh2.utils.parseKey(publicKey),
+          asnMap: new Map()
+        };
+        this.authInfo.set(trimmed, obj);
+      }
+      obj.asnMap.set(asn, {
+        challengeText,
+        date: +new Date()
       });
     } catch (error) {
       this.logger.error(error);
     }
   }
 
-  removeAuthInfo(asn) {
-    this.authInfo.delete(asn);
-  }
-
-  checkValue(input, allowed) {
-    const autoReject = (input.length !== allowed.length);
-    if (autoReject) {
-      // Prevent leaking length information by always making a comparison with the
-      // same input when lengths don't match what we expect ...
-      allowed = input;
+  clearSshAuthInfo(asn, publicKey) {
+    try {
+      const split = publicKey.split('\x20');
+      const trimmed = `${split[0].toLowerCase()} ${split[1]}`;
+      const obj = this.authInfo.get(trimmed);
+      if (obj && obj.asnMap.has(asn)) obj.asnMap.delete(asn);
+    } catch (error) {
+      this.logger.error(error);
     }
-    const isMatch = timingSafeEqual(input, allowed);
-    return (!autoReject && isMatch);
   }
 
   startServer() {
     const sshServer = new ssh2.Server({
       hostKeys: this.hosyKeys
     }, client => {
-      let authenticated = null;
+      let asnMap = null;
       let accepted = false;
       client.on('authentication', ctx => {
-        if (accepted) return ctx.accept();
+        try {
+          if (accepted) return ctx.accept();
 
-        if (ctx.method === 'publickey') {
-          for (const [k, v] of this.authInfo) {
-            try {
-              if (ctx.key.algo === v.publicKey.type &&
-                this.checkValue(ctx.key.data, v.publicKey.getPublicSSH())) {
-                if (ctx.signature) {
-                  if (!allowedPubKey.verify(ctx.blob, ctx.signature, ctx.hashAlgo)) return ctx.reject();
-                }
-                authenticated = { ...v };
-                this.app.logger.getLogger('auth').info(`AS${k} - SSH Authentication successful with method: ${ctx.method}, algorithm: ${ctx.key.algo}, service: ${ctx.service}`);
-                accepted = true;
-                return ctx.accept();
+          if (ctx.method === 'publickey') {
+            const publicKey = ctx.key.data.toString('base64');
+            const obj = this.authInfo.get(`${ctx.key.algo.toLowerCase()} ${publicKey}`);
+            if (obj) {
+              if (ctx.signature &&
+                !obj.parsed.verify(ctx.blob, ctx.signature, ctx.hashAlgo)
+              ) {
+                return ctx.reject(['publickey']);
               }
-            } catch (error) {
-              this.logger.error(error);
-              return ctx.reject(["publickey"]);
+              asnMap = obj.asnMap;
+              accepted = true;
+              return ctx.accept();
             }
           }
+        } catch (error) {
+          this.logger.error(error);
         }
-
         return ctx.reject(["publickey"]);
       })
         .on('ready', () => {
@@ -115,8 +127,21 @@ export class DefaultSshAuthServerProvider {
               this.sshAuthServerSettings.ssh2.bannerText.forEach(t => {
                 stream.write(`${t}\r\n`);
               });
+
               stream.write('\r\n\r\n');
-              stream.write(authenticated ? `>> Your challenge code is:\r\n\t${authenticated.challengeText}\r\n\r\n` : '>> You have nothing to do here.\r\n\r\n');
+
+              let found = false;
+              for (const [asn, obj] of asnMap) {
+                found = true;
+                if (obj) {
+                  stream.write(`>> Challenge code for AS${asn} is:\r\n\t\x1b[1m${obj.challengeText}\x1b[0m\r\n`);
+                  stream.write(`   Last request date: ${new Date(obj.date).toUTCString()}\r\n\r\n`);
+                } else {
+                  stream.write(`>> AS${asn} has nothing to do here.\r\n\r\n`);
+                }
+              }
+              if (!found) stream.write(`>> You have nothing to do here.\r\n\r\n`);
+
               stream.write('\r\n');
               stream.write('* Type \"q\" to quit.\r\n\r\n');
               stream.write(`* The challenge code can only be used once.\r\n  It changes each time you authenticate with us.\r\n\r\n`);
@@ -139,7 +164,7 @@ export class DefaultSshAuthServerProvider {
                   stream.end();
                   stream.close();
                 }
-                authenticated = null;
+                asnMap = null;
               };
 
               const countDown = () => {

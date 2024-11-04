@@ -253,7 +253,7 @@ async function request(c) {
     authChallenge = authState.code;
   } else if (authMethod.type === SupportedAuthType.SSH_SERVER_AUTH) {
     authChallenge = c.var.app.settings.sshAuthServerSettings.challengeHint || 'Connect to our server using SSH Client';
-    c.var.app.ssh.addAuthInfo(authState.asn, authMethod.data.trim(), authState.code);
+    c.var.app.ssh.setSshAuthInfo(authState.asn, authMethod.data.trim(), authState.code);
   }
 
   try {
@@ -351,7 +351,7 @@ async function challenge(c) {
     authMethod = 'ssh';
     if (nullOrEmpty(authData) || typeof authData !== 'string') return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     if (authData.trim() === code) authResult = true;
-    c.var.app.ssh.removeAuthInfo(authState.asn);
+    c.var.app.ssh.clearSshAuthInfo(authState.asn, authState.authMethod.data.trim());
   }
 
   if (authResult) {
