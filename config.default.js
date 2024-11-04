@@ -137,7 +137,7 @@ export default {
 
   sshAuthServerSettings: { // This app will starts a ssh server to accept connections to auth with us
     provider: 'default',
-    challengeHint: 'ssh iedon.net -p 4222',
+    challengeHint: 'ssh -o "IdentitiesOnly=yes" -i ~/.ssh/id_rsa|ed25519 iedon.net -p 4222',
     ssh2: {
       listen: {
         type: 'tcp', // tcp or unix

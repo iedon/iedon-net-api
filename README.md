@@ -18,17 +18,18 @@ This is the API server designed for auto-peering for iEdon-Net and the DN42. Bas
 bun install
 cd acorle-sdk
 bun install
+cd ..
 cp ./config.default.js ./config.js
 ```
 
 ## Run dev
 
 ```bash
-bun run dev
+bun run dev # Using bun
 ```
 
 ## Run prod
 
 ```bash
-bun run prod
+npm run prod # Using node as bun not support ed25519 for now
 ```
