@@ -6,6 +6,6 @@ export async function useLogger(app, loggerSettings = {}) {
     const { [handlerName]: LoggerProvider } = await import(`./${providerName}LoggerProvider.js`);
     app.logger = new LoggerProvider(app, loggerSettings);
   } catch (error) {
-    console.error(`Logger provider ${handlerName} could not be loaded.`);
+    console.error(`Logger provider ${handlerName} could not be loaded.`, error);
   }
 }

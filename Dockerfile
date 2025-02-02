@@ -28,6 +28,5 @@ COPY --from=prerelease /usr/src/app/ .
 RUN cd ./acorle-sdk && bun install --frozen-lockfile --production
 
 # run the app
-USER bun
 EXPOSE 3000 4222
 ENTRYPOINT [ "bun", "run", "app.js" ]
