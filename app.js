@@ -19,7 +19,6 @@ import { useDbContext } from './db/dbContext.js';
 import { registerRoutes } from './routes.js';
 import { entryMiddleware } from './entry.js';
 
-import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 
 // Initialize app object
@@ -153,5 +152,4 @@ if (localSettings.listen.type === 'unix') {
   module.unix = localSettings.listen.path;
 }
 
-serve(module);
 export default module;

@@ -1,0 +1,15 @@
+---
+
+services:
+  peerapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./config/auth42-cred:/data/auth42-cred
+      - ./config/config.json:/usr/src/app/config.json
+      - /var/run/peerapi:/var/run/peerapi
+    #ports:
+    #  - "3000:3000/tcp"
+    #  - "4222:4222/tcp"

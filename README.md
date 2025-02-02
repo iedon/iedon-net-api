@@ -31,5 +31,5 @@ bun run dev # Using bun
 ## Run prod
 
 ```bash
-npm run prod # Using node as bun not support ed25519 for now
+bun run prod
 ```

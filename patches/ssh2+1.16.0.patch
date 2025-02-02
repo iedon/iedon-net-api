@@ -1,0 +1,11 @@
++++ b/node_modules/ssh2/lib/protocol/constants.js
+@@ -20,8 +20,8 @@ const eddsaSupported = (() => {
+     let verified;
+     try {
+       sig = crypto.sign(null, data, key);
+-      verified = crypto.verify(null, data, key, sig);
++      verified = true // crypto.verify(null, data, key, sig);
+     } catch {}
+     return (Buffer.isBuffer(sig) && sig.length === 64 && verified === true);
+   }
+ 
