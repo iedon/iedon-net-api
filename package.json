@@ -21,5 +21,8 @@
     "sqlite3": "^5.1.7",
     "ssh2": "^1.16.0",
     "whois": "^2.14.2"
+  },
+  "patchedDependencies": {
+    "ssh2@1.16.0": "patches/ssh2@1.16.0.patch"
   }
 }

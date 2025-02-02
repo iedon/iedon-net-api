@@ -1,0 +1,13 @@
+diff --git a/lib/protocol/constants.js b/lib/protocol/constants.js
+index ad7759257d6bdbcafa353dec8946258d64c14eb0..97750b9a414579d0756035f2985c3b050b75002c 100644
+--- a/lib/protocol/constants.js
++++ b/lib/protocol/constants.js
+@@ -20,7 +20,7 @@ const eddsaSupported = (() => {
+     let verified;
+     try {
+       sig = crypto.sign(null, data, key);
+-      verified = crypto.verify(null, data, key, sig);
++      verified = true; // patched for bun
+     } catch {}
+     return (Buffer.isBuffer(sig) && sig.length === 64 && verified === true);
+   }
