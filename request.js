@@ -1,7 +1,7 @@
 import { makeResponse, RESPONSE_CODE } from "./common/packet.js";
 import { nullOrEmpty } from './common/helper.js';
 
-export function entryMiddleware(app) {
+export function requestMiddleware(app) {
   app.server.use(async (c, next) => {
     c.set('app', app);
 

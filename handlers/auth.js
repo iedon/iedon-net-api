@@ -60,6 +60,7 @@ export default async function (c) {
     case 'query': return await query(c);
     case 'request': return await request(c);
     case 'challenge': return await challenge(c);
+    case 'open': return await open(c);
     default: return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
   }
 }
@@ -78,10 +79,7 @@ function checkAsn(asn) {
   return true;
 }
 
-async function query(c) {
-  if (!checkAsn(c.var.body.asn)) return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
-  const asn = String(c.var.body.asn).trim();
-
+async function queryAuthMethods(c, asn) {
   let availableAuthMethods = [];
   const addAuthMethods = element => {
     if (!availableAuthMethods.some(entry => entry.type === element.type && entry.data === element.data)) {
@@ -195,12 +193,24 @@ async function query(c) {
 
   if (_person === '') _person = `AS${asn}`;
 
+  return {
+    person: _person,
+    availableAuthMethods
+  }
+}
+
+async function query(c) {
+  if (!checkAsn(c.var.body.asn)) return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+  const asn = String(c.var.body.asn).trim();
+
+  let { person, availableAuthMethods } = await queryAuthMethods(c, asn);
+
   let authState = '';
   try {
     authState = await signAsync(
       {
         asn,
-        person: _person,
+        person,
         availableAuthMethods
       },
       c.var.app.settings.authHandler.stateSignSecret,
@@ -210,7 +220,7 @@ async function query(c) {
     c.var.app.logger.getLogger('app').error(error);
   }
   return makeResponse(c, RESPONSE_CODE.OK, {
-    person: _person,
+    person,
     authState,
     availableAuthMethods
   });
@@ -401,4 +411,47 @@ function parseWhois(whoisText) {
   });
 
   return parsedData;
+}
+
+async function open(c) {
+  const type = c.var.body.type
+  if (!type) return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+
+  const authProvider = c.var.app.openAuthProviders[type];
+  if (!authProvider) return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+
+  let token = '';
+  let asn = 0;
+  let authResult = false;
+  let _person = '';
+  let _email = '';
+  const result = authProvider.authenticate(c.var.body.data);
+  if (result) {
+    asn = Number(result.asn.trim()) || 0;
+    if (!asn) {
+      c.var.app.logger.getLogger('app').error(`Failed to get ASN from Open Auth provider(${type}).`);
+    } else {
+      const { person, email } = result;
+      if (person && email) {
+        _person = person;
+        _email = email;
+      } else {
+        const query = await queryAuthMethods(c, asn.toString());
+        _person = query.person;
+        query.availableAuthMethods.forEach(m => {
+          if (m && m.type === SupportedAuthType.EMAIL && m.data) _email = m.data;
+        });
+      }
+
+      authResult = true;
+      token = await c.var.app.token.generateToken({
+        asn: asn.toString(),
+        person: _person
+      });
+
+      c.var.app.logger.getLogger('auth').info(`AS${asn} - Authentication successful via Open Auth(${type}).`);
+    }
+  }
+
+  return makeResponse(c, RESPONSE_CODE.OK, { authResult, token, asn, person: _person, email: _email });
 }

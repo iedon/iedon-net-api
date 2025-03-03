@@ -3,7 +3,7 @@
 services:
   peerapi:
     build:
-      context: .
+      context: ./iedon-net-api
       dockerfile: Dockerfile
     restart: unless-stopped
     volumes:

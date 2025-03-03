@@ -13,11 +13,12 @@ import { useMail } from './providers/mail/mail.js';
 import { useWhois } from './providers/whois/whois.js';
 import { useFetch } from './providers/fetch/fetch.js'
 import { useToken } from './providers/token/token.js';
-import { useSshAuthServer } from './providers/ssh/sshAuthServer.js';
 import { useDbContext } from './db/dbContext.js';
+import { useSshAuthServer } from './providers/ssh/sshAuthServer.js';
+import { useOpenAuth } from './providers/openAuth/openAuth.js';
 
 import { registerRoutes } from './routes.js';
-import { entryMiddleware } from './entry.js';
+import { requestMiddleware } from './request.js';
 
 import { Hono } from 'hono';
 
@@ -29,7 +30,7 @@ const app = {
 };
 
 // Initialize routes and core middleware
-entryMiddleware(app, app.settings.tokenSettings);
+requestMiddleware(app, app.settings.tokenSettings);
 registerRoutes(app);
 
 // Main async function to bootstrap the application
@@ -41,9 +42,7 @@ registerRoutes(app);
     appLogger.info(`${pkg.name}/${pkg.version} started.`);
 
     // Initialize Acorle if enabled
-    if (localSettings.acorle.enabled) {
-      await initAcorle(app);
-    }
+    if (localSettings.acorle.enabled) await initAcorle(app);
 
     // Initialize dependencies
     await Promise.all([
@@ -53,6 +52,7 @@ registerRoutes(app);
       useFetch(app, app.settings.fetchSettings),
       useToken(app, app.settings.tokenSettings),
       useSshAuthServer(app, app.settings.sshAuthServerSettings),
+      useOpenAuth(app, app.settings.openAuthSettings)
     ]);
 
     app.ready = true;

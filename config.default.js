@@ -227,6 +227,15 @@ export default {
     },
   },
 
+  openAuthSettings: {
+    providers: [ 'kioubit', 'default' ],
+    kioubit: {
+      myDomain: 'iedon.net',
+      notAllowed: [ 4242422189 ],
+      publicKey: './kioubitAuth.pem'
+    },
+  },
+
   tokenSettings: {
     provider: 'default',    // default provider is using jsonwebtoken package and takes jwt configuration section bellow
     logging: true,
