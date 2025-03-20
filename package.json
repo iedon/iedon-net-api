@@ -10,10 +10,10 @@
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
-    "hono": "^4.7.2",
+    "hono": "^4.7.5",
     "jsonwebtoken": "^9.0.2",
     "log4js": "^6.9.1",
-    "mysql2": "^3.12.0",
+    "mysql2": "^3.14.0",
     "nodemailer": "^6.10.0",
     "openpgp": "^5.11.2",
     "patch-package": "^8.0.0",
@@ -21,8 +21,5 @@
     "sqlite3": "^5.1.7",
     "ssh2": "^1.16.0",
     "whois": "^2.14.2"
-  },
-  "patchedDependencies": {
-    "ssh2@1.16.0": "patches/ssh2@1.16.0.patch"
   }
 }
