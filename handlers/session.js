@@ -155,7 +155,37 @@ async function add(c, routerUuid) {
         if (mySessionCount > 0xFF) throw new Error(`Too many sessions for peer "${c.var.state.asn}" on router "${routerUuid}"`);
 
         const peerAsn = isAdmin ? _asn : Number(c.var.state.asn)
-        const ifname = `dn${peerAsn.toString(36)}${mySessionCount.toString(16)}`;
+        let ifname = `dn${peerAsn.toString(36)}${mySessionCount.toString(16)}`;
+
+        // Check if the session with specific ifname already exists
+        const checkIfNameExist = async interfaceName => {
+          const ifNameCount = await c.var.app.models.bgpSessions.count({
+            where: {
+              router: routerUuid,
+              asn: Number(c.var.state.asn),
+              interface: interfaceName
+            },
+            transaction
+          });
+          return ifNameCount !== 0;
+        };
+        
+        // Already taken
+        if (await checkIfNameExist(ifname)) {
+          // try - 1
+          ifname = `dn${peerAsn.toString(36)}${(mySessionCount - 1).toString(16)}`;
+
+          // try + 1
+          if (await checkIfNameExist(ifname)) {
+            ifname = `dn${peerAsn.toString(36)}${(mySessionCount + 1).toString(16)}`;
+          }
+
+          // Something wrong
+          if (await checkIfNameExist(ifname)) {
+            throw new Error(`Interface name "${ifname}" already exists for peer "${peerAsn}" on router "${routerUuid}"`);
+          }
+        }
+
         await c.var.app.models.bgpSessions.create({
           router: routerUuid,
           asn: peerAsn,
@@ -198,7 +228,7 @@ async function add(c, routerUuid) {
   } catch (error) {
     c.var.app.logger.getLogger('app').error(error);
     await transaction.rollback();
-    return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
+    return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE, error.toString());
   }
 
   return makeResponse(c, RESPONSE_CODE.OK);
