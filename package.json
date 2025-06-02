@@ -8,13 +8,14 @@
     "dev": "bun --watch app.js"
   },
   "dependencies": {
-    "bcrypt": "^5.1.1",
+    "bcrypt": "^6.0.0",
     "hono": "^4.7.10",
+    "ioredis": "^5.6.1",
     "jsonwebtoken": "^9.0.2",
     "log4js": "^6.9.1",
     "mysql2": "^3.14.1",
-    "nodemailer": "^6.10.0",
-    "openpgp": "^5.11.2",
+    "nodemailer": "^7.0.3",
+    "openpgp": "^6.1.1",
     "sequelize": "^7.0.0-alpha.4",
     "sqlite3": "^5.1.7",
     "ssh2": "^1.16.0",

@@ -74,7 +74,8 @@ function handlePreflightRequest(c, preflightHeaders) {
 }
 
 function isPublicUrl(url) {
-  return url === '/auth' || url.startsWith('/list/');
+  // Agent requests will be verified in agentHandler seperately
+  return url === '/auth' || url.startsWith('/agent/') || url.startsWith('/list/');
 }
 
 async function verifyAndGetState(app, c) {

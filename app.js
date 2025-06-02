@@ -14,6 +14,7 @@ import { useWhois } from './providers/whois/whois.js';
 import { useFetch } from './providers/fetch/fetch.js'
 import { useToken } from './providers/token/token.js';
 import { useDbContext } from './db/dbContext.js';
+import { useRedisContext } from './db/redisContext.js';
 import { useSshAuthServer } from './providers/ssh/sshAuthServer.js';
 import { useOpenAuth } from './providers/openAuth/openAuth.js';
 
@@ -47,6 +48,7 @@ registerRoutes(app);
     // Initialize dependencies
     await Promise.all([
       useDbContext(app, app.settings.dbSettings),
+      useRedisContext(app, app.settings.redisSettings),
       useMail(app, app.settings.mailSettings),
       useWhois(app, app.settings.whoisSettings),
       useFetch(app, app.settings.fetchSettings),

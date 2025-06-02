@@ -20,6 +20,12 @@ export const initModel = sequelize => sequelize.define('routers', {
     allowNull: true,
     defaultValue: null
   },
+  agentSecret: {
+    field: 'agent_secret',
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: null
+  },
   location: {
     field: 'location',
     type: DataTypes.STRING,
