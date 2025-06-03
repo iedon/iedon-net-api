@@ -5,6 +5,8 @@ import {
   IPV6_REGEX,
   ASN_MAX,
   ASN_MIN,
+  bcryptGenHash,
+  bcryptGenSalt,
 } from "../../common/helper.js";
 
 // Routing Policy
@@ -18,6 +20,19 @@ const ROUTING_POLICY = {
   UPSTREAM: 2,
   DOWNSTREAM: 3,
 };
+
+// Peering Session Status
+export const PEERING_STATUS = {
+  DELETED: 0, // Used for Agent Callback, not used in DB
+  DISABLED: 1,
+  ENABLED: 2,
+  PENDING_APPROVAL: 3,
+  QUEUED_FOR_SETUP: 4,
+  QUEUED_FOR_DELETE: 5,
+  PROBLEM: 6,
+  TEARDOWN: 7,
+};
+
 const AUTHORIZATION_HEADER = "Authorization";
 
 async function getRouterCbParams(c, routerUuid, transaction = null) {
@@ -96,11 +111,21 @@ export async function generalAgentHandler(c, action) {
     const session = await getBgpSession(c, sessionUuid, transaction);
     if (!session) {
       await transaction.rollback();
-      return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
+      return makeResponse(c, RESPONSE_CODE.NOT_FOUND);
     }
 
     // Reject requests are not belonging to this user
     if (session.asn !== Number(c.var.state.asn)) {
+      await transaction.rollback();
+      return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+    }
+
+    // Peering session is teardown and user is not admin
+    if (
+      session.status === PEERING_STATUS.TEARDOWN &&
+      action !== "delete" &&
+      !(await isUserAdmin(c))
+    ) {
       await transaction.rollback();
       return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     }
@@ -115,48 +140,32 @@ export async function generalAgentHandler(c, action) {
       return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
     }
 
-    const response = await c.var.app.fetch.post(
-      url,
+    let newStatus = PEERING_STATUS.DISABLED;
+    switch (action) {
+      case "enable":
+        newStatus = PEERING_STATUS.ENABLED;
+        break;
+      case "approve":
+        newStatus = PEERING_STATUS.QUEUED_FOR_SETUP;
+        break;
+      case "delete":
+        newStatus = PEERING_STATUS.QUEUED_FOR_DELETE;
+        break;
+      case "disable":
+      default:
+        newStatus = PEERING_STATUS.DISABLED;
+        break;
+    }
+    const rows = await c.var.app.models.bgpSessions.update(
       {
-        action,
-        session,
+        status: newStatus,
       },
-      "json",
-      {
-        header: {
-          [AUTHORIZATION_HEADER]: `Bearer ${agentSecret}`,
-        },
-      }
+      { where: { uuid: sessionUuid }, transaction }
     );
-
-    if (
-      !response ||
-      response.status !== 200 ||
-      nullOrEmpty(response.data) ||
-      !response.data.success
-    ) {
-      throw new Error(
-        `Calling router's callback failed: ${
-          response ? `HTTP Status ${response.status}` : "Null response"
-        }`
-      );
-    }
-
-    if (action === "delete") {
-      const rows = await c.var.app.models.bgpSessions.destroy({
-        where: { uuid: sessionUuid },
-        transaction,
-      });
-      if (rows !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
-    } else {
-      const rows = await c.var.app.models.bgpSessions.update(
-        { status: action === "enable" || action === "approve" ? 1 : 0 },
-        { where: { uuid: sessionUuid }, transaction }
-      );
-      if (rows[0] !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
-    }
+    if (rows[0] !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
 
     await transaction.commit();
+    requestAgentToSync(c, agentSecret); // Async, do not await
   } catch (error) {
     await transaction.rollback();
     c.var.app.logger.getLogger("app").error(error);
@@ -172,13 +181,11 @@ export async function queryPeeringSession(c) {
     return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
 
   const session = await getBgpSession(c, sessionUuid);
-  if (!session) return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
+  if (!session) return makeResponse(c, RESPONSE_CODE.NOT_FOUND);
 
   // Reject requests are not belonging to this user
   if (session.asn !== Number(c.var.state.asn))
-    return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
-
-  if (session.status < 1) return makeResponse(c, RESPONSE_CODE.OK, "");
+    return makeResponse(c, RESPONSE_CODE.NOT_FOUND);
 
   return makeResponse(
     c,
@@ -265,6 +272,8 @@ export async function nodeInfo(c) {
   if (!url || !agentSecret)
     return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
 
+  const salt = await bcryptGenSalt();
+  const token = await bcryptGenHash(agentSecret, salt);
   const response = await c.var.app.fetch.post(
     url,
     {
@@ -275,7 +284,7 @@ export async function nodeInfo(c) {
     "json",
     {
       header: {
-        [AUTHORIZATION_HEADER]: `Bearer ${agentSecret}`,
+        [AUTHORIZATION_HEADER]: `Bearer ${token}`,
       },
     }
   );
@@ -306,7 +315,7 @@ export async function isUserAdmin(c) {
   }
 }
 
-export async function addPeeringSession(c) {
+export async function setPeeringSession(c, modify = false) {
   const routerUuid = c.var.body.router;
   const _ipv4 = c.var.body.ipv4;
   const _ipv6 = c.var.body.ipv6;
@@ -318,6 +327,7 @@ export async function addPeeringSession(c) {
   const _data = c.var.body.data;
   const _mtu = c.var.body.mtu;
   const _policy = c.var.body.policy;
+  const _sessionUuid = c.var.body.session;
 
   if (
     nullOrEmpty(routerUuid) ||
@@ -334,7 +344,8 @@ export async function addPeeringSession(c) {
     !Array.isArray(_extensions) ||
     _extensions.some((e) => typeof e !== "string") ||
     nullOrEmpty(_mtu) ||
-    nullOrEmpty(_policy)
+    nullOrEmpty(_policy) ||
+    (modify && nullOrEmpty(_sessionUuid))
   ) {
     return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
   }
@@ -444,8 +455,11 @@ export async function addPeeringSession(c) {
       return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     }
 
-    // Check whether the router is available to add a new session
-    if (routerQuery && routerQuery.dataValues.session_capacity > 0) {
+    // Check whether the router is available to add a new session or modify existing one
+    if (
+      routerQuery &&
+      (modify || routerQuery.dataValues.session_capacity > 0)
+    ) {
       const capacity = routerQuery.dataValues.session_capacity;
       const routerSessionCount = await c.var.app.models.bgpSessions.count({
         where: {
@@ -454,123 +468,99 @@ export async function addPeeringSession(c) {
         transaction,
       });
 
-      // router is open and has enough capacity for new peerings
-      if (capacity - routerSessionCount > 0) {
-        const mySessionCount = await c.var.app.models.bgpSessions.count({
-          where: {
-            router: routerUuid,
-            asn: Number(c.var.state.asn),
-          },
-          transaction,
-        });
-
-        if (mySessionCount > 0xff)
-          throw new Error(
-            `Too many sessions for peer "${c.var.state.asn}" on router "${routerUuid}"`
-          );
-
-        const peerAsn = isAdmin ? _asn : Number(c.var.state.asn);
-        let ifname = `dn${peerAsn.toString(36)}${mySessionCount.toString(16)}`;
-
-        // Check if the session with specific ifname already exists
-        const checkIfNameExist = async (interfaceName) => {
-          const ifNameCount = await c.var.app.models.bgpSessions.count({
+      // router is open and has enough capacity for new peerings or modify existing one
+      if (modify || capacity - routerSessionCount > 0) {
+        let ifname = "";
+        let session = null;
+        let peerAsn = isAdmin ? _asn : Number(c.var.state.asn);
+        if (modify) {
+          session = await getBgpSession(c, _sessionUuid, transaction);
+          if (!session) {
+            throw new Error("Could not found exisiting session");
+          }
+          ifname = session.interface;
+          peerAsn = session.asn;
+        } else {
+          const mySessionCount = await c.var.app.models.bgpSessions.count({
             where: {
               router: routerUuid,
               asn: Number(c.var.state.asn),
-              interface: interfaceName,
             },
             transaction,
           });
-          return ifNameCount !== 0;
-        };
 
-        // Already taken
-        if (await checkIfNameExist(ifname)) {
-          // try - 1
-          ifname = `dn${peerAsn.toString(36)}${(mySessionCount - 1).toString(
-            16
-          )}`;
+          if (mySessionCount > 0xff)
+            throw new Error(
+              `Too many sessions for peer "${c.var.state.asn}" on router "${routerUuid}"`
+            );
 
-          // try + 1
+          ifname = `dn${peerAsn.toString(36)}${mySessionCount.toString(16)}`;
+
+          // Check if the session with specific ifname already exists
+          const checkIfNameExist = async (interfaceName) => {
+            const ifNameCount = await c.var.app.models.bgpSessions.count({
+              where: {
+                router: routerUuid,
+                asn: Number(c.var.state.asn),
+                interface: interfaceName,
+              },
+              transaction,
+            });
+            return ifNameCount !== 0;
+          };
+
+          // Already taken
           if (await checkIfNameExist(ifname)) {
-            ifname = `dn${peerAsn.toString(36)}${(mySessionCount + 1).toString(
+            // try - 1
+            ifname = `dn${peerAsn.toString(36)}${(mySessionCount - 1).toString(
               16
             )}`;
-          }
 
-          // Something wrong
-          if (await checkIfNameExist(ifname)) {
-            throw new Error(
-              `Interface name "${ifname}" already exists for peer "${peerAsn}" on router "${routerUuid}"`
-            );
-          }
-        }
-
-        await c.var.app.models.bgpSessions.create(
-          {
-            router: routerUuid,
-            asn: peerAsn,
-            status: routerQuery.dataValues.auto_peering ? 1 : -1,
-            ipv4: _ipv4 || null,
-            ipv6: _ipv6 || null,
-            ipv6LinkLocal: _ipv6_link_local || null,
-            type: _type,
-            extensions: JSON.stringify(extensions),
-            interface: ifname,
-            endpoint: _endpoint || null,
-            credential: _credential || null,
-            data: JSON.stringify(_data),
-            mtu: _mtu,
-            policy: _policy,
-          },
-          { transaction }
-        );
-
-        if (routerQuery.dataValues.auto_peering) {
-          const response = await c.var.app.fetch.post(
-            url,
-            {
-              action: "add",
-              router: routerUuid,
-              asn: peerAsn,
-              ipv4: _ipv4 || null,
-              ipv6: _ipv6 || null,
-              ipv6LinkLocal: _ipv6_link_local || null,
-              type: _type,
-              extensions: JSON.stringify(extensions),
-              interface: ifname,
-              endpoint: _endpoint || null,
-              credential: _credential || null,
-              data: _data,
-              mtu: _mtu,
-              policy: _policy,
-            },
-            "json",
-            {
-              header: {
-                [AUTHORIZATION_HEADER]: `Bearer ${agentSecret}`,
-              },
+            // try + 1
+            if (await checkIfNameExist(ifname)) {
+              ifname = `dn${peerAsn.toString(36)}${(
+                mySessionCount + 1
+              ).toString(16)}`;
             }
-          );
 
-          if (
-            !response ||
-            response.status !== 200 ||
-            nullOrEmpty(response.data) ||
-            !response.data.success
-          ) {
-            throw new Error(
-              `Calling router's callback failed: ${
-                response ? `HTTP Status ${response.status}` : "Null response"
-              }`
-            );
+            // Something wrong
+            if (await checkIfNameExist(ifname)) {
+              throw new Error(
+                `Interface name "${ifname}" already exists for peer "${peerAsn}" on router "${routerUuid}"`
+              );
+            }
           }
         }
+
+        const options = {
+          router: routerUuid,
+          asn: peerAsn,
+          status: routerQuery.dataValues.auto_peering
+            ? PEERING_STATUS.QUEUED_FOR_SETUP
+            : PEERING_STATUS.PENDING_APPROVAL,
+          ipv4: _ipv4 || null,
+          ipv6: _ipv6 || null,
+          ipv6LinkLocal: _ipv6_link_local || null,
+          type: _type,
+          extensions: JSON.stringify(extensions),
+          interface: ifname,
+          endpoint: _endpoint || null,
+          credential: _credential || null,
+          data: JSON.stringify(_data),
+          mtu: _mtu,
+          policy: _policy,
+        };
+        if (modify && _sessionUuid) {
+          options.uuid = _sessionUuid;
+        }
+        await c.var.app.models.bgpSessions.upsert(options, { transaction });
       }
     }
 
     await transaction.commit();
+    if (routerQuery.dataValues.auto_peering) {
+      requestAgentToSync(c, agentSecret); // Async, do not await
+    }
   } catch (error) {
     c.var.app.logger.getLogger("app").error(error);
     await transaction.rollback();
@@ -582,4 +572,51 @@ export async function addPeeringSession(c) {
   }
 
   return makeResponse(c, RESPONSE_CODE.OK);
+}
+
+export async function deleteDbSession(c, sessionUuid) {
+  const rows = await c.var.app.models.bgpSessions.destroy({
+    where: { uuid: sessionUuid },
+  });
+  if (rows !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
+}
+
+export async function modifyDbSessionStatus(c, sessionUuid, status) {
+  const rows = await c.var.app.models.bgpSessions.update(
+    { status },
+    { where: { uuid: sessionUuid } }
+  );
+  if (rows[0] !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
+}
+
+async function requestAgentToSync(c, agentSecret) {
+  const salt = await bcryptGenSalt();
+  const token = await bcryptGenHash(agentSecret, salt);
+  const response = await c.var.app.fetch.post(
+    url,
+    {
+      action: "sync",
+    },
+    "json",
+    {
+      header: {
+        [AUTHORIZATION_HEADER]: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (
+    !response ||
+    response.status !== 200 ||
+    nullOrEmpty(response.data) ||
+    !response.data.success
+  ) {
+    c.var.app.logger
+      .getLogger("app")
+      .error(
+        `Calling router's callback failed: ${
+          response ? `HTTP Status ${response.status}` : "Null response"
+        }`
+      );
+  }
 }

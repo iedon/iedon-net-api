@@ -189,8 +189,7 @@ export default {
       keyPrefix: 'peerapi:',
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false
-    },
-    ttlSeconds: 5 * 60
+    }
   },
 
   mailSettings: {

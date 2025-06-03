@@ -25,14 +25,14 @@ export const initModel = (sequelize) =>
       },
       status: {
         field: "status",
-        type: DataTypes.TINYINT,
+        type: DataTypes.TINYINT.UNSIGNED,
         allowNull: false,
-        defaultValue: true,
-        comment: "e.g.: -1: pending review, 0: disabled, 1: enabled",
+        defaultValue: 0,
+        comment: "e.g.: 1: disabled, 2: enabled, 3: pending review, 4: queued for setup, 5: queued for delete, 6: problem, 7: teardown",
       },
       mtu: {
         field: "mtu",
-        type: DataTypes.SMALLINT,
+        type: DataTypes.SMALLINT.UNSIGNED,
         allowNull: false,
         defaultValue: 1280,
         comment:

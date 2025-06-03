@@ -15,9 +15,7 @@ export async function useRedisContext(app, redisSettings) {
       try {
         return await redis.set(
           key,
-          JSON.stringify(data),
-          "EX",
-          redisSettings.ttlSeconds
+          JSON.stringify(data)
         ) === "OK"; // Set with expiry
       } catch (err) {
         dbLogger.error(`Error writing data to redis for key ${key}:`, err);
@@ -33,5 +31,14 @@ export async function useRedisContext(app, redisSettings) {
         return null;
       }
     },
+    deleteData: async (key) => {
+      try {
+        return await redis.del(key) > 0;
+      } catch (err) {
+        dbLogger.error(`Error deleting data from redis for key ${key}:`, err);
+        return false;
+      }
+    },
+    getInstance: () => redis,
   };
 }

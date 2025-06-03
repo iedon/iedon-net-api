@@ -1,6 +1,6 @@
 import { makeResponse, RESPONSE_CODE } from "../common/packet.js";
 import {
-  addPeeringSession,
+  setPeeringSession,
   nodeInfo,
   queryPeeringSession,
   enumPeeringSessions,
@@ -35,7 +35,9 @@ export default async function (c) {
 
   switch (action) {
     case "add":
-      return await addPeeringSession(c);
+      return await setPeeringSession(c);
+    case "modify":
+      return await setPeeringSession(c, true);
     case "delete":
       return await generalAgentHandler(c, "delete");
     case "enable":
@@ -45,7 +47,7 @@ export default async function (c) {
     case "query":
       return await queryPeeringSession(c);
     case "info":
-      return await nodeInfo(c);
+      return await nodeInfo(c); // get node peering info(string defined in agent config)
     default:
       return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
   }
