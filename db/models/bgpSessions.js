@@ -69,7 +69,7 @@ export const initModel = (sequelize) =>
         type: DataTypes.STRING,
         allowNull: false,
         defaultValue: "wireguard",
-        comment: "e.g.: direct, wireguard, openvpn, ipsec, gre",
+        comment: "e.g.: direct, wireguard, openvpn, ipsec, gre, ip6gre",
       },
       extensions: {
         field: "extensions",

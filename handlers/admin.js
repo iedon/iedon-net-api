@@ -8,7 +8,7 @@ import {
 } from "./services/peeringService.js";
 
 export default async function (c) {
-  if (!await isUserAdmin(c)) {
+  if (!(await isUserAdmin(c))) {
     return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
   }
   const action = c.var.body.action;
@@ -276,6 +276,10 @@ const handlers = {
 
   async approveSession(c) {
     return await generalAgentHandler(c, "approve");
+  },
+
+  async teardownSession(c) {
+    return await generalAgentHandler(c, "teardown");
   },
 
   async deleteSession(c) {

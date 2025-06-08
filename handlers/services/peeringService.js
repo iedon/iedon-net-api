@@ -10,15 +10,40 @@ import {
 } from "../../common/helper.js";
 
 // Routing Policy
-// 0: full/transit(send and recv all valid)
-// 1: peer(send own, recv their owned)
-// 2: upstream(send all valid, recv their owned)
-// 3: downstream(send own, recv all valid)
+// FULL 0:
+//  Send all our valid routes.  Receive all your valid routes.
+//  Send your valid routes to:
+//  - Full-table peers
+//  - Downstream peer
+
+// TRANSIT 1:
+//  Send our valid self and downstream routes. Receive all your valid routes.
+//  Send your valid routes to:
+//  - Full-table peers
+//  - Downstream peers
+
+// PEER 2:
+//  Send our valid self and downstream routes. Receive your valid self and downstream routes.
+//  Send your valid routes to:
+//  - Full-table peers
+//  - Downstream peers
+
+// DOWNSTREAM 3:
+//  Send all our valid routes. Receive your valid self and downstream routes.
+//  Send your valid routes to:
+//  - Full-table peers
+//  - Transit peers
+//  - Downstream peers
+
+// UPSTREAM 4: (admin)
+//  receive all valid routes
+//  send self routes and downstream routes to remote
 const ROUTING_POLICY = {
   FULL: 0,
-  PEER: 1,
-  UPSTREAM: 2,
+  TRANSIT: 1,
+  PEER: 2,
   DOWNSTREAM: 3,
+  UPSTREAM: 4,
 };
 
 // Peering Session Status
@@ -94,6 +119,16 @@ async function getBgpSession(c, uuid, transaction = null) {
     : null;
 }
 
+function canSessionBeModified(status) {
+  return ![
+    PEERING_STATUS.DELETED, // never
+    PEERING_STATUS.PENDING_APPROVAL,
+    PEERING_STATUS.QUEUED_FOR_DELETE,
+    PEERING_STATUS.QUEUED_FOR_SETUP,
+    PEERING_STATUS.TEARDOWN,
+  ].includes(status);
+}
+
 export async function generalAgentHandler(c, action) {
   const sessionUuid = c.var.body.session;
   const routerUuid = c.var.body.router;
@@ -120,9 +155,9 @@ export async function generalAgentHandler(c, action) {
       return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     }
 
-    // Peering session is teardown and user is not admin
+    // Peering session is locked and user is not admin
     if (
-      session.status === PEERING_STATUS.TEARDOWN &&
+      !canSessionBeModified(session.status) &&
       action !== "delete" &&
       !(await isUserAdmin(c))
     ) {
@@ -147,6 +182,9 @@ export async function generalAgentHandler(c, action) {
         break;
       case "approve":
         newStatus = PEERING_STATUS.QUEUED_FOR_SETUP;
+        break;
+      case "teardown":
+        newStatus = PEERING_STATUS.TEARDOWN;
         break;
       case "delete":
         newStatus = PEERING_STATUS.QUEUED_FOR_DELETE;
@@ -275,9 +313,8 @@ export async function nodeInfo(c) {
   const salt = await bcryptGenSalt();
   const token = await bcryptGenHash(agentSecret, salt);
   const response = await c.var.app.fetch.post(
-    url,
+    `${url}/info`,
     {
-      action: "info",
       asn: c.var.state.asn,
       data,
     },
@@ -293,9 +330,21 @@ export async function nodeInfo(c) {
     !response ||
     response.status !== 200 ||
     nullOrEmpty(response.data) ||
-    !response.data.success
-  )
+    response.data.code !== 0
+  ) {
+    c.var.app.logger
+      .getLogger("fetch")
+      .error(
+        `Calling router's callback failed: ${
+          response
+            ? `HTTP Status ${response.status}, Code: ${
+                response.data.code || "None"
+              }${response.data.message ? `, Message: ${response.data.message}` : ""}`
+            : "Null response"
+        }`
+      );
     return makeResponse(c, RESPONSE_CODE.ROUTER_OPERATION_FAILED);
+  }
   return makeResponse(c, RESPONSE_CODE.OK, response.data.data);
 }
 
@@ -370,15 +419,21 @@ export async function setPeeringSession(c, modify = false) {
   }
 
   if (
+    nullOrEmpty(_policy) ||
+    typeof _policy !== "number" ||
+    isNaN(_policy) ||
+    !Object.values(ROUTING_POLICY).includes(_policy) ||
+    (!isAdmin && _policy === ROUTING_POLICY.UPSTREAM)
+  ) {
+    return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+  }
+
+  if (
     nullOrEmpty(_mtu) ||
     typeof _mtu !== "number" ||
     isNaN(_mtu) ||
     _mtu < 1280 ||
-    _mtu > 9999 ||
-    nullOrEmpty(_policy) ||
-    typeof _policy !== "number" ||
-    isNaN(_policy) ||
-    !Object.values(ROUTING_POLICY).includes(_policy)
+    _mtu > 9999
   ) {
     return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
   }
@@ -477,6 +532,10 @@ export async function setPeeringSession(c, modify = false) {
           session = await getBgpSession(c, _sessionUuid, transaction);
           if (!session) {
             throw new Error("Could not found exisiting session");
+          }
+          if (!canSessionBeModified(session.status)) {
+            await transaction.rollback();
+            return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
           }
           ifname = session.interface;
           peerAsn = session.asn;
@@ -590,32 +649,33 @@ export async function modifyDbSessionStatus(c, sessionUuid, status) {
 }
 
 async function requestAgentToSync(c, agentSecret) {
+  const [url, agentSecret] = await getRouterCbParams(c, routerUuid);
+  if (!url || !agentSecret)
+    return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
+
   const salt = await bcryptGenSalt();
   const token = await bcryptGenHash(agentSecret, salt);
-  const response = await c.var.app.fetch.post(
-    url,
-    {
-      action: "sync",
+  const response = await c.var.app.fetch.get(`${url}/sync`, "json", {
+    header: {
+      [AUTHORIZATION_HEADER]: `Bearer ${token}`,
     },
-    "json",
-    {
-      header: {
-        [AUTHORIZATION_HEADER]: `Bearer ${token}`,
-      },
-    }
-  );
+  });
 
   if (
     !response ||
     response.status !== 200 ||
     nullOrEmpty(response.data) ||
-    !response.data.success
+    response.data.code !== 0
   ) {
     c.var.app.logger
-      .getLogger("app")
+      .getLogger("fetch")
       .error(
         `Calling router's callback failed: ${
-          response ? `HTTP Status ${response.status}` : "Null response"
+          response
+            ? `HTTP Status ${response.status}, Code: ${
+                response.data.code || "None"
+              }${response.data.message ? `, Message: ${response.data.message}` : ""}`
+            : "Null response"
         }`
       );
   }

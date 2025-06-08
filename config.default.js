@@ -21,52 +21,59 @@ export default {
           type: 'stdout'
         },
         app: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/app/app.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         },
         acorle: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/acorle/acorle.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         },
         mail: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/mail/mail.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         },
         whois: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/whois/whois.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         },
         fetch: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/fetch/fetch.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         },
         auth: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/auth/auth.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         },
         ssh: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/ssh/ssh.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         }
       },
@@ -133,7 +140,7 @@ export default {
       algorithm: 'HS256',
       expiresIn: '10m'    // where sign-in state(via mail, pgp, ssh) expires
     },
-    agentApiToken: '__DEMO__AGENT_API_TOKEN__',
+    agentApiKey: '__DEMO__AGENT_API_TOKEN__', // managerSecret in agent
   },
 
   sshAuthServerSettings: { // This app will starts a ssh server to accept connections to auth with us
@@ -176,6 +183,7 @@ export default {
       idle: 10000
     },
     logging: true,
+    alter: false,        // set to true to alter database schema on startup
     dialectOptions: {}
   },
 

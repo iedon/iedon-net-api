@@ -6,7 +6,7 @@ import {
   PEERING_STATUS,
 } from "./services/peeringService";
 
-async function verifyAgentToken(c, router) {
+async function verifyAgentApiKey(c, router) {
   const header = c.req.header("Authorization");
   if (!header) return false;
 
@@ -14,7 +14,10 @@ async function verifyAgentToken(c, router) {
   if (!token) return false;
 
   try {
-    return await bcryptCompare(`${c.var.app.settings.authHandler.agentToken}${router}`, token);
+    return await bcryptCompare(
+      `${c.var.app.settings.authHandler.agentApiKey}${router}`,
+      token
+    );
   } catch {
     return false;
   }
@@ -23,7 +26,7 @@ async function verifyAgentToken(c, router) {
 export default async function (c) {
   const { action, router } = c.req.param();
 
-  if (!await verifyAgentToken(c, router || "")) {
+  if (!(await verifyAgentApiKey(c, router || ""))) {
     return makeResponse(c, RESPONSE_CODE.UNAUTHORIZED);
   }
 
@@ -104,13 +107,14 @@ async function sessions(c, router) {
 }
 
 async function heartbeat(c, router) {
-  const { version, kernel, uptime, rs, tx, rx, tcp, udp, timestamp } =
+  const { version, kernel, loadAvg, uptime, rs, tx, rx, tcp, udp, timestamp } =
     c.var.body;
   return makeResponse(
     c,
     (await c.var.app.redis.setData(`router:${router}`, {
       version: version || "",
       kernel: kernel || "",
+      loadAvg: loadAvg || "",
       uptime: uptime || 0,
       rs: rs || "",
       tx: tx || 0,
@@ -150,110 +154,115 @@ async function modify(c) {
 }
 
 async function report(c) {
-  const { sessions } = c.var.body;
-  if (!sessions || !Array.isArray(sessions)) {
+  const { metrics } = c.var.body;
+  if (!metrics || !Array.isArray(metrics)) {
     return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
   }
 
   const enumMap = new Map();
   const multi = c.var.app.redis.getInstance().multi({ pipeline: true });
-  for (let i = 0; i < sessions.length; i++) {
-    const session = sessions[i];
-    if (!session.uuid) continue;
+  for (let i = 0; i < metrics.length; i++) {
+    const metric = metrics[i];
+    if (!metric.uuid) continue;
 
-    if (!enumMap.has(session.asn)) enumMap.set(session.asn, {});
-    const asnPeers = enumMap.get(session.asn);
+    if (!enumMap.has(metric.asn)) enumMap.set(metric.asn, {});
+    const asnPeers = enumMap.get(metric.asn);
     if (!asnPeers) continue;
 
-    multi.set(`session:${session.uuid}`, {
-      uuid: session.uuid || "",
-      asn: session.asn || 0,
-      timestamp: session.timestamp || 0,
+    multi.set(`session:${metric.uuid}`, {
+      uuid: metric.uuid || "",
+      asn: metric.asn || 0,
+      timestamp: metric.timestamp || 0,
       bgp: {
-        state: session.bgp.state || "",
-        info: session.bgp.info || "",
+        state: metric.bgp?.state || "",
+        info: metric.bgp?.info || "",
         routes: {
           ipv4: {
             imported: {
-              current: session.bgp.routes?.ipv4?.imported?.current || 0,
-              metric: session.bgp.routes?.ipv4?.imported?.metric?.map((m) =>
-                m.length === 2 ? [m[0], m[1]] : []
+              current: metric.bgp?.routes?.ipv4?.imported?.current || 0,
+              metric: (metric.bgp?.routes?.ipv4?.imported?.metric || []).map(
+                (m) => (m.length === 2 ? [m[0], m[1]] : [])
               ),
             },
             exported: {
-              current: session.bgp.routes?.ipv4?.exported?.current || 0,
-              metric: session.bgp.routes?.ipv4?.exported?.metric?.map((m) =>
-                m.length === 2 ? [m[0], m[1]] : []
+              current: metric.bgp?.routes?.ipv4?.exported?.current || 0,
+              metric: (metric.bgp?.routes?.ipv4?.exported?.metric || []).map(
+                (m) => (m.length === 2 ? [m[0], m[1]] : [])
               ),
             },
           },
           ipv6: {
             imported: {
-              current: session.bgp.routes?.ipv6?.imported?.current || 0,
-              metric: session.bgp.routes?.ipv6?.imported?.metric?.map((m) =>
-                m.length === 2 ? [m[0], m[1]] : []
+              current: metric.bgp?.routes?.ipv6?.imported?.current || 0,
+              metric: (metric.bgp?.routes?.ipv6?.imported?.metric || []).map(
+                (m) => (m.length === 2 ? [m[0], m[1]] : [])
               ),
             },
             exported: {
-              current: session.bgp.routes?.ipv6?.exported?.current || 0,
-              metric: session.bgp.routes?.ipv6?.exported?.metric?.map((m) =>
-                m.length === 2 ? [m[0], m[1]] : []
+              current: metric.bgp?.routes?.ipv6?.exported?.current || 0,
+              metric: (metric.bgp?.routes?.ipv6?.exported?.metric || []).map(
+                (m) => (m.length === 2 ? [m[0], m[1]] : [])
               ),
             },
           },
         },
       },
       interface: {
-        ipv4: session.interface?.ipv4 || "",
-        ipv6: session.interface?.ipv6 || "",
-        ipv6LinkLocal: session.interface?.ipv6LinkLocal || "",
-        mac: session.interface?.mac || "",
-        mtu: session.interface?.mtu || 0,
-        status: session.interface?.status || "",
+        ipv4: metric.interface?.ipv4 || "",
+        ipv6: metric.interface?.ipv6 || "",
+        ipv6LinkLocal: metric.interface?.ipv6LinkLocal || "",
+        mac: metric.interface?.mac || "",
+        mtu: metric.interface?.mtu || 0,
+        status: metric.interface?.status || "",
         traffic: {
-          rx: {
-            total: session.interface?.traffic?.rx?.total || 0,
-            current: session.interface?.traffic?.rx?.current || 0,
-            metric: session.interface?.traffic?.rx?.metric?.map((m) =>
-              m.length === 2 ? [m[0], m[1]] : []
-            ),
-          },
-          tx: {
-            total: session.interface?.traffic?.tx?.total || 0,
-            current: session.interface?.traffic?.tx?.current || 0,
-            metric: session.interface?.traffic?.tx?.metric?.map((m) =>
-              m.length === 2 ? [m[0], m[1]] : []
-            ),
-          },
+          total: [
+            metric.interface?.traffic?.total?.[0] || 0, // Tx
+            metric.interface?.traffic?.total?.[1] || 0, // Rx
+          ],
+          current: [
+            metric.interface?.traffic?.current?.[0] || 0, // Tx
+            metric.interface?.traffic?.current?.[1] || 0, // Rx
+          ],
+          metric: (metric.interface?.traffic?.metric || []).map((m) =>
+            m.length === 3 ? [m[0], m[1], m[2]] : []
+          ),
         },
       },
       rtt: {
-        current: session.rtt || 0,
-        metric: session.rtt?.metric?.map((m) =>
+        current: metric.rtt?.current || 0,
+        metric: (metric.rtt?.metric || []).map((m) =>
           m.length === 2 ? [m[0], m[1]] : []
         ),
       },
     });
 
-    asnPeers[session.uuid] = {
-      state: session.bgp.state || "",
-      info: session.bgp.info || "",
+    asnPeers[metric.uuid] = {
+      state: metric.bgp?.state || "",
+      info: metric.bgp?.info || "",
     };
   }
 
-  if (sessions.length) {
+  if (metrics.length) {
     for (const [asn, dict] of enumMap.entries()) {
-      await multi.set(`enum:${asn}`, dict);
+      multi.set(`enum:${asn}`, dict);
     }
 
-    const results = await multi.exec();
-    results.forEach(({ err, result }) => {
-      if (err || result !== "OK") {
-        c.var.app.logger
-          .getLogger("app")
-          .error(`Error writing session data to redis: ${err || result}`);
+    try {
+      const results = await multi.exec();
+      for (let i = 0; i < results.length; i++) {
+        const { err, result } = results[i];
+        if (err || result !== "OK") {
+          c.var.app.logger
+            .getLogger("app")
+            .error(`Error writing metric data to redis: ${err || result}`);
+        }
       }
-    });
+    } catch (error) {
+      c.var.app.logger
+        .getLogger("app")
+        .error(`Error executing Redis batch: ${error}`);
+      return makeResponse(c, RESPONSE_CODE.SERVER_ERROR);
+    }
   }
 
   return makeResponse(c, RESPONSE_CODE.OK);

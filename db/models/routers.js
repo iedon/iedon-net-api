@@ -24,7 +24,7 @@ export const initModel = sequelize => sequelize.define('routers', {
     field: 'agent_secret',
     type: DataTypes.STRING,
     allowNull: false,
-    defaultValue: null
+    defaultValue: ''
   },
   location: {
     field: 'location',
@@ -84,7 +84,7 @@ export const initModel = sequelize => sequelize.define('routers', {
     type: DataTypes.STRING,
     allowNull: false,
     defaultValue: '["wireguard"]',
-    comment: 'e.g.: ["direct", "wireguard", "openvpn"]'
+    comment: 'e.g.: ["direct", "wireguard", "openvpn", "gre", "ip6gre"]'
   },
   extensions: {
     field: 'extensions',
