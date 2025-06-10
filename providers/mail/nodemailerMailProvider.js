@@ -2,6 +2,10 @@ import { DefaultMailProvider } from "./defaultMailProvider.js";
 import { createTransport } from "nodemailer";
 
 export class NodemailerMailProvider extends DefaultMailProvider {
+  constructor(app, mailSettings) {
+    super(app, mailSettings);
+  }
+
   async send(to, subject, content) {
     return new Promise((resolve, _) => {
       createTransport(this.mailSettings.nodemailer).sendMail(

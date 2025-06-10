@@ -11,26 +11,26 @@ import {
 
 // Routing Policy
 // FULL 0:
-//  Send all our valid routes.  Receive all your valid routes.
-//  Send your valid routes to:
+//  Send all valid routes.  Receive all valid routes.
+//  Send received routes to:
 //  - Full-table peers
 //  - Downstream peer
 
 // TRANSIT 1:
-//  Send our valid self and downstream routes. Receive all your valid routes.
-//  Send your valid routes to:
+//  Send our valid self and downstream routes. Receive all valid routes.
+//  Send received routes to:
 //  - Full-table peers
 //  - Downstream peers
 
 // PEER 2:
-//  Send our valid self and downstream routes. Receive your valid self and downstream routes.
-//  Send your valid routes to:
+//  Send our valid self and downstream routes. Receive remote owned valid and remtoe downstream routes.
+//  Send received routes to:
 //  - Full-table peers
 //  - Downstream peers
 
 // DOWNSTREAM 3:
-//  Send all our valid routes. Receive your valid self and downstream routes.
-//  Send your valid routes to:
+//  Send all valid routes. Receive remote owned valid and remote downstream routes.
+//  Send received routes to:
 //  - Full-table peers
 //  - Transit peers
 //  - Downstream peers
@@ -60,7 +60,7 @@ export const PEERING_STATUS = {
 
 const AUTHORIZATION_HEADER = "Authorization";
 
-async function getRouterCbParams(c, routerUuid, transaction = null) {
+export async function getRouterCbParams(c, routerUuid, transaction = null) {
   const options = {
     attributes: ["agent_secret", "callback_url"],
     where: {
@@ -75,9 +75,10 @@ async function getRouterCbParams(c, routerUuid, transaction = null) {
     : [null, null];
 }
 
-async function getBgpSession(c, uuid, transaction = null) {
+export async function getBgpSession(c, uuid, transaction = null) {
   const options = {
     attributes: [
+      "router",
       "asn",
       "status",
       "ipv4",
@@ -100,6 +101,7 @@ async function getBgpSession(c, uuid, transaction = null) {
   const result = await c.var.app.models.bgpSessions.findOne(options);
   return result
     ? {
+        router: result.dataValues.router,
         asn: result.dataValues.asn,
         status: result.dataValues.status,
         ipv4: result.dataValues.ipv4,
@@ -150,7 +152,7 @@ export async function generalAgentHandler(c, action) {
     }
 
     // Reject requests are not belonging to this user
-    if (session.asn !== Number(c.var.state.asn)) {
+    if (session.asn !== Number(c.var.state.asn) && !(await isUserAdmin(c))) {
       await transaction.rollback();
       return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     }
@@ -190,9 +192,11 @@ export async function generalAgentHandler(c, action) {
         newStatus = PEERING_STATUS.QUEUED_FOR_DELETE;
         break;
       case "disable":
-      default:
         newStatus = PEERING_STATUS.DISABLED;
         break;
+      default:
+        await transaction.rollback();
+        return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     }
     const rows = await c.var.app.models.bgpSessions.update(
       {
@@ -203,7 +207,11 @@ export async function generalAgentHandler(c, action) {
     if (rows[0] !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
 
     await transaction.commit();
-    requestAgentToSync(c, agentSecret); // Async, do not await
+    requestAgentToSync(c, url, agentSecret, routerUuid).catch((error) => {
+      c.var.app.logger
+        .getLogger("fetch")
+        .error(`Failed to request agent to sync: ${error}`);
+    });
   } catch (error) {
     await transaction.rollback();
     c.var.app.logger.getLogger("app").error(error);
@@ -222,14 +230,17 @@ export async function queryPeeringSession(c) {
   if (!session) return makeResponse(c, RESPONSE_CODE.NOT_FOUND);
 
   // Reject requests are not belonging to this user
-  if (session.asn !== Number(c.var.state.asn))
+  if (!(await isUserAdmin(c)) && session.asn !== Number(c.var.state.asn))
     return makeResponse(c, RESPONSE_CODE.NOT_FOUND);
 
-  return makeResponse(
-    c,
-    RESPONSE_CODE.OK,
-    await c.var.app.redis.getData(`session:${sessionUuid}`)
-  );
+  let data = await c.var.app.redis.getData(`session:${sessionUuid}`);
+  if (!data) {
+    data = {};
+  }
+
+  data.data = session.data || "";
+
+  return makeResponse(c, RESPONSE_CODE.OK, data);
 }
 
 export async function enumPeeringSessions(c, enumAll = false) {
@@ -239,6 +250,7 @@ export async function enumPeeringSessions(c, enumAll = false) {
       attributes: [
         "uuid",
         "router",
+        "asn",
         "status",
         "ipv4",
         "ipv6",
@@ -259,11 +271,12 @@ export async function enumPeeringSessions(c, enumAll = false) {
       };
     }
     const result = await c.var.app.models.bgpSessions.findAll(options);
-    const summary = await c.var.app.redis.getData(`enum:${c.var.state.asn}`);
+    const enumCache = new Map();
     for (let i = 0; i < result.length; i++) {
       const data = {
         uuid: result[i].dataValues.uuid,
         router: result[i].dataValues.router,
+        asn: result[i].dataValues.asn,
         status: result[i].dataValues.status,
         ipv4: result[i].dataValues.ipv4,
         ipv6: result[i].dataValues.ipv6,
@@ -281,14 +294,25 @@ export async function enumPeeringSessions(c, enumAll = false) {
         mtu: result[i].dataValues.mtu,
         policy: result[i].dataValues.policy,
       };
+      let hasCache = enumCache.has(data.asn);
+      const summary = hasCache
+        ? enumCache.get(data.asn)
+        : await c.var.app.redis.getData(`enum:${data.asn}`);
       if (summary) {
-        const { state, info } = summary[result[i].dataValues.uuid];
-        Object.assign(data, {
-          summary: {
-            state: state || "",
-            info: info || "",
-          },
-        });
+        if (!hasCache) enumCache.set(data.asn, summary);
+        const summaryArr = summary[result[i].dataValues.uuid];
+        if (summaryArr && Array.isArray(summaryArr)) {
+          const bgpStatus = summaryArr.map((s) => {
+            return {
+              name: s.name || "",
+              state: s.state || "",
+              info: s.info || "",
+            };
+          });
+          Object.assign(data, {
+            bgpStatus,
+          });
+        }
       }
       sessions.push(data);
     }
@@ -311,16 +335,16 @@ export async function nodeInfo(c) {
     return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
 
   const salt = await bcryptGenSalt();
-  const token = await bcryptGenHash(agentSecret, salt);
+  const token = await bcryptGenHash(`${agentSecret}${routerUuid}`, salt);
   const response = await c.var.app.fetch.post(
     `${url}/info`,
     {
-      asn: c.var.state.asn,
+      asn: Number(c.var.state.asn),
       data,
     },
     "json",
     {
-      header: {
+      headers: {
         [AUTHORIZATION_HEADER]: `Bearer ${token}`,
       },
     }
@@ -339,7 +363,11 @@ export async function nodeInfo(c) {
           response
             ? `HTTP Status ${response.status}, Code: ${
                 response.data.code || "None"
-              }${response.data.message ? `, Message: ${response.data.message}` : ""}`
+              }${
+                response.data.message
+                  ? `, Message: ${response.data.message}`
+                  : ""
+              }`
             : "Null response"
         }`
       );
@@ -387,13 +415,8 @@ export async function setPeeringSession(c, modify = false) {
     nullOrEmpty(_type) ||
     typeof _type !== "string" ||
     nullOrEmpty(_data) ||
-    // Uncomment bellow to disallow empty endpoit/credential
-    // nullOrEmpty(_endpoint) ||
-    // nullOrEmpty(_credential)) ||
     !Array.isArray(_extensions) ||
     _extensions.some((e) => typeof e !== "string") ||
-    nullOrEmpty(_mtu) ||
-    nullOrEmpty(_policy) ||
     (modify && nullOrEmpty(_sessionUuid))
   ) {
     return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
@@ -451,11 +474,35 @@ export async function setPeeringSession(c, modify = false) {
     return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
   }
 
+  if (
+    nullOrEmpty(_credential) &&
+    _type !== "gre" &&
+    _type !== "ip6gre" &&
+    _type !== "direct"
+  ) {
+    return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+  }
+
   if (!nullOrEmpty(_endpoint)) {
     try {
-      if (_endpoint.indexOf(":") === -1) throw new Error("Invalid endpoint");
-      const url = new URL(`https://${_endpoint}`);
-      _endpoint = url.host;
+      if (
+        _endpoint.indexOf(":") === -1 &&
+        _type !== "gre" &&
+        _type !== "ip6gre" &&
+        _type !== "direct"
+      )
+        throw new Error("Invalid endpoint");
+      if (_type === "gre") {
+        if (!IPV4_REGEX.test(_endpoint)) throw new Error("Invalid endpoint");
+      } else if (_type === "ip6gre") {
+        if (!IPV6_REGEX.test(_endpoint)) throw new Error("Invalid endpoint");
+      } else if (_type === "direct") {
+        if (!IPV4_REGEX.test(_endpoint) && !IPV6_REGEX.test(_endpoint))
+          throw new Error("Invalid endpoint");
+      } else {
+        const url = new URL(`https://${_endpoint}`);
+        _endpoint = url.host;
+      }
     } catch {
       return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     }
@@ -491,6 +538,11 @@ export async function setPeeringSession(c, modify = false) {
       transaction,
     });
 
+    if (!routerQuery) {
+      await transaction.rollback();
+      return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
+    }
+
     let extensions = [];
     try {
       extensions = _extensions;
@@ -502,8 +554,10 @@ export async function setPeeringSession(c, modify = false) {
         extensions.some((_e) =>
           JSON.parse(routerQuery.dataValues.extensions).some((e) => e === _e)
         );
-      if (!typeExist || !extensionExist)
-        throw new Error("Invalid link type or extension");
+      if (!typeExist || !extensionExist) {
+        await transaction.rollback();
+        return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+      }
     } catch {
       // This also supresses JSON exception
       await transaction.rollback();
@@ -527,31 +581,31 @@ export async function setPeeringSession(c, modify = false) {
       if (modify || capacity - routerSessionCount > 0) {
         let ifname = "";
         let session = null;
-        let peerAsn = isAdmin ? _asn : Number(c.var.state.asn);
+        const peerAsn = isAdmin ? _asn : Number(c.var.state.asn);
         if (modify) {
           session = await getBgpSession(c, _sessionUuid, transaction);
           if (!session) {
-            throw new Error("Could not found exisiting session");
+            await transaction.rollback();
+            return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
           }
           if (!canSessionBeModified(session.status)) {
             await transaction.rollback();
             return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
           }
           ifname = session.interface;
-          peerAsn = session.asn;
         } else {
           const mySessionCount = await c.var.app.models.bgpSessions.count({
             where: {
               router: routerUuid,
-              asn: Number(c.var.state.asn),
+              asn: peerAsn,
             },
             transaction,
           });
 
-          if (mySessionCount > 0xff)
-            throw new Error(
-              `Too many sessions for peer "${c.var.state.asn}" on router "${routerUuid}"`
-            );
+          if (mySessionCount > 0xff) {
+            await transaction.rollback();
+            return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+          }
 
           ifname = `dn${peerAsn.toString(36)}${mySessionCount.toString(16)}`;
 
@@ -560,7 +614,7 @@ export async function setPeeringSession(c, modify = false) {
             const ifNameCount = await c.var.app.models.bgpSessions.count({
               where: {
                 router: routerUuid,
-                asn: Number(c.var.state.asn),
+                asn: peerAsn,
                 interface: interfaceName,
               },
               transaction,
@@ -584,9 +638,8 @@ export async function setPeeringSession(c, modify = false) {
 
             // Something wrong
             if (await checkIfNameExist(ifname)) {
-              throw new Error(
-                `Interface name "${ifname}" already exists for peer "${peerAsn}" on router "${routerUuid}"`
-              );
+              await transaction.rollback();
+              return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
             }
           }
         }
@@ -610,27 +663,47 @@ export async function setPeeringSession(c, modify = false) {
           policy: _policy,
         };
         if (modify && _sessionUuid) {
-          options.uuid = _sessionUuid;
+          await c.var.app.models.bgpSessions.update(
+            options,
+            { where: { uuid: _sessionUuid } },
+            { transaction }
+          );
+        } else {
+          await c.var.app.models.bgpSessions.create(options, { transaction });
         }
-        await c.var.app.models.bgpSessions.upsert(options, { transaction });
       }
     }
 
     await transaction.commit();
     if (routerQuery.dataValues.auto_peering) {
-      requestAgentToSync(c, agentSecret); // Async, do not await
+      requestAgentToSync(c, url, agentSecret, routerUuid).catch((error) => {
+        c.var.app.logger
+          .getLogger("fetch")
+          .error(`Failed to request agent to sync: ${error}`);
+      });
     }
   } catch (error) {
     c.var.app.logger.getLogger("app").error(error);
     await transaction.rollback();
-    return makeResponse(
-      c,
-      RESPONSE_CODE.ROUTER_NOT_AVAILABLE,
-      error.toString()
-    );
+    return makeResponse(c, RESPONSE_CODE.ROUTER_OPERATION_FAILED);
   }
 
   return makeResponse(c, RESPONSE_CODE.OK);
+}
+
+export async function getPeeringSession(c) {
+  const sessionUuid = c.var.body.session;
+  if (nullOrEmpty(sessionUuid) || typeof sessionUuid !== "string")
+    return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
+
+  const session = await getBgpSession(c, sessionUuid);
+  if (!session) return makeResponse(c, RESPONSE_CODE.NOT_FOUND);
+
+  // Reject requests are not belonging to this user
+  if (!(await isUserAdmin(c)) && session.asn !== Number(c.var.state.asn))
+    return makeResponse(c, RESPONSE_CODE.NOT_FOUND);
+
+  return makeResponse(c, RESPONSE_CODE.OK, { session });
 }
 
 export async function deleteDbSession(c, sessionUuid) {
@@ -648,15 +721,11 @@ export async function modifyDbSessionStatus(c, sessionUuid, status) {
   if (rows[0] !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
 }
 
-async function requestAgentToSync(c, agentSecret) {
-  const [url, agentSecret] = await getRouterCbParams(c, routerUuid);
-  if (!url || !agentSecret)
-    return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
-
+export async function requestAgentToSync(c, url, agentSecret, routerUuid) {
   const salt = await bcryptGenSalt();
-  const token = await bcryptGenHash(agentSecret, salt);
+  const token = await bcryptGenHash(`${agentSecret}${routerUuid}`, salt);
   const response = await c.var.app.fetch.get(`${url}/sync`, "json", {
-    header: {
+    headers: {
       [AUTHORIZATION_HEADER]: `Bearer ${token}`,
     },
   });
@@ -674,7 +743,11 @@ async function requestAgentToSync(c, agentSecret) {
           response
             ? `HTTP Status ${response.status}, Code: ${
                 response.data.code || "None"
-              }${response.data.message ? `, Message: ${response.data.message}` : ""}`
+              }${
+                response.data.message
+                  ? `, Message: ${response.data.message}`
+                  : ""
+              }`
             : "Null response"
         }`
       );

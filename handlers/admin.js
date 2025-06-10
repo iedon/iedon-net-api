@@ -96,6 +96,7 @@ const handlers = {
           "ipv6_link_local",
           "link_types",
           "extensions",
+          "agent_secret"
         ],
       });
       for (let i = 0; i < result.length; i++)
@@ -123,6 +124,7 @@ const handlers = {
           extensions: result[i].dataValues.extensions
             ? JSON.parse(result[i].dataValues.extensions)
             : [],
+          agentSecret: result[i].dataValues.agent_secret || "",
         });
     } catch (error) {
       c.var.app.logger.getLogger("app").error(error);
@@ -146,18 +148,21 @@ const handlers = {
       ipv6LinkLocal,
       linkTypes,
       extensions,
+      agentSecret
     } = c.var.body;
     const _public = c.var.body.public;
     if (
-      nullOrEmpty(name) ||
       typeof name !== "string" ||
       typeof _public !== "boolean" ||
       typeof openPeering !== "boolean" ||
       typeof autoPeering !== "boolean" ||
+      typeof agentSecret !== "string" ||
+      nullOrEmpty(name) ||
+      nullOrEmpty(agentSecret) ||
       nullOrEmpty(sessionCapacity) ||
       typeof sessionCapacity !== "number" ||
-      nullOrEmpty(callbackUrl) ||
       typeof callbackUrl !== "string" ||
+      nullOrEmpty(callbackUrl) ||
       !Array.isArray(linkTypes) ||
       linkTypes.some((e) => typeof e !== "string") ||
       (!nullOrEmpty(extensions) &&
@@ -193,6 +198,7 @@ const handlers = {
         ipv6LinkLocal,
         linkTypes: JSON.stringify(linkTypes),
         extensions: JSON.stringify(extensions),
+        agentSecret,
       };
 
       if (type === "update") {

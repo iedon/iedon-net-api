@@ -140,7 +140,7 @@ export default {
       algorithm: 'HS256',
       expiresIn: '10m'    // where sign-in state(via mail, pgp, ssh) expires
     },
-    agentApiKey: '__DEMO__AGENT_API_TOKEN__', // managerSecret in agent
+    agentApiKey: '__DEMO__AGENT_API_TOKEN__', // PeerAPIConfig.secret in agent
   },
 
   sshAuthServerSettings: { // This app will starts a ssh server to accept connections to auth with us

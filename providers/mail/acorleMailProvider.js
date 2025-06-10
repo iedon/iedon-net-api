@@ -1,6 +1,10 @@
 import { DefaultMailProvider } from "./defaultMailProvider";
 
 export class AcorleMailProvider extends DefaultMailProvider {
+  constructor(app, mailSettings) {
+    super(app, mailSettings);
+  }
+
   async send(to, subject, content) {
     try {
       const result = JSON.parse(

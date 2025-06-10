@@ -5,6 +5,7 @@ import {
   queryPeeringSession,
   enumPeeringSessions,
   generalAgentHandler,
+  getPeeringSession,
 } from "./services/peeringService.js";
 
 /*
@@ -31,9 +32,10 @@ import {
 
 export default async function (c) {
   const action = c.var.body.action;
-  if (action === "enum") return await enumPeeringSessions(c);
 
   switch (action) {
+    case "enum":
+      return await enumPeeringSessions(c);
     case "add":
       return await setPeeringSession(c);
     case "modify":
@@ -46,6 +48,8 @@ export default async function (c) {
       return await generalAgentHandler(c, "disable");
     case "query":
       return await queryPeeringSession(c);
+    case "get":
+      return await getPeeringSession(c);
     case "info":
       return await nodeInfo(c); // get node peering info(string defined in agent config)
     default:

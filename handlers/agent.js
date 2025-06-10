@@ -4,6 +4,9 @@ import {
   deleteDbSession,
   modifyDbSessionStatus,
   PEERING_STATUS,
+  requestAgentToSync,
+  getRouterCbParams,
+  getBgpSession,
 } from "./services/peeringService";
 
 async function verifyAgentApiKey(c, router) {
@@ -130,27 +133,43 @@ async function heartbeat(c, router) {
 
 async function modify(c) {
   const { status, session } = c.var.body;
+  const sessionUuid = session;
   if (
     status === undefined ||
     status === null ||
     isNaN(status) ||
     !Object.values(PEERING_STATUS).includes(status) ||
-    !session
+    !sessionUuid
   ) {
     return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
   }
 
   try {
-    if (status === PEERING_STATUS.DELETED) {
-      await deleteDbSession(c, session);
-      await c.var.app.redis.deleteData(`session:${session}`);
-    } else {
-      await modifyDbSessionStatus(c, session, status);
+    const currentSession = await getBgpSession(c, sessionUuid);
+    if (!currentSession) return makeResponse(c, RESPONSE_CODE.NOT_FOUND);
+
+    const [url, agentSecret] = await getRouterCbParams(c, currentSession.router);
+    if (!url || !agentSecret) {
+      return makeResponse(c, RESPONSE_CODE.ROUTER_OPERATION_FAILED);
     }
+
+    if (status === PEERING_STATUS.DELETED) {
+      await deleteDbSession(c, sessionUuid);
+      await c.var.app.redis.deleteData(`session:${sessionUuid}`);
+    } else {
+      await modifyDbSessionStatus(c, sessionUuid, status);
+    }
+
+    requestAgentToSync(c, url, agentSecret, currentSession.router).catch((error) => {
+      c.var.app.logger
+        .getLogger("fetch")
+        .error(`Failed to request agent to sync: ${error}`);
+    });
   } catch (error) {
     c.var.app.logger.getLogger("app").error(error);
     return makeResponse(c, RESPONSE_CODE.SERVER_ERROR);
   }
+  return makeResponse(c, RESPONSE_CODE.OK);
 }
 
 async function report(c) {
@@ -169,92 +188,104 @@ async function report(c) {
     const asnPeers = enumMap.get(metric.asn);
     if (!asnPeers) continue;
 
-    multi.set(`session:${metric.uuid}`, {
-      uuid: metric.uuid || "",
-      asn: metric.asn || 0,
-      timestamp: metric.timestamp || 0,
-      bgp: {
-        state: metric.bgp?.state || "",
-        info: metric.bgp?.info || "",
-        routes: {
-          ipv4: {
-            imported: {
-              current: metric.bgp?.routes?.ipv4?.imported?.current || 0,
-              metric: (metric.bgp?.routes?.ipv4?.imported?.metric || []).map(
-                (m) => (m.length === 2 ? [m[0], m[1]] : [])
-              ),
+    multi.set(
+      `session:${metric.uuid}`,
+      JSON.stringify({
+        uuid: metric.uuid || "",
+        asn: metric.asn || 0,
+        timestamp: metric.timestamp || 0,
+        bgp: metric.bgp?.map((entry) => {
+          return {
+            name: entry.name || "",
+            state: entry.state || "",
+            info: entry.info || "",
+            routes: {
+              ipv4: {
+                imported: {
+                  current: entry.routes?.ipv4?.imported?.current || 0,
+                  metric: (entry.routes?.ipv4?.imported?.metric || []).map(
+                    (m) => (m.length === 2 ? [m[0], m[1]] : [])
+                  ),
+                },
+                exported: {
+                  current: entry.routes?.ipv4?.exported?.current || 0,
+                  metric: (entry.routes?.ipv4?.exported?.metric || []).map(
+                    (m) => (m.length === 2 ? [m[0], m[1]] : [])
+                  ),
+                },
+              },
+              ipv6: {
+                imported: {
+                  current: entry.routes?.ipv6?.imported?.current || 0,
+                  metric: (entry.routes?.ipv6?.imported?.metric || []).map(
+                    (m) => (m.length === 2 ? [m[0], m[1]] : [])
+                  ),
+                },
+                exported: {
+                  current: entry.routes?.ipv6?.exported?.current || 0,
+                  metric: (entry.routes?.ipv6?.exported?.metric || []).map(
+                    (m) => (m.length === 2 ? [m[0], m[1]] : [])
+                  ),
+                },
+              },
             },
-            exported: {
-              current: metric.bgp?.routes?.ipv4?.exported?.current || 0,
-              metric: (metric.bgp?.routes?.ipv4?.exported?.metric || []).map(
-                (m) => (m.length === 2 ? [m[0], m[1]] : [])
-              ),
-            },
-          },
-          ipv6: {
-            imported: {
-              current: metric.bgp?.routes?.ipv6?.imported?.current || 0,
-              metric: (metric.bgp?.routes?.ipv6?.imported?.metric || []).map(
-                (m) => (m.length === 2 ? [m[0], m[1]] : [])
-              ),
-            },
-            exported: {
-              current: metric.bgp?.routes?.ipv6?.exported?.current || 0,
-              metric: (metric.bgp?.routes?.ipv6?.exported?.metric || []).map(
-                (m) => (m.length === 2 ? [m[0], m[1]] : [])
-              ),
-            },
+          };
+        }),
+        interface: {
+          ipv4: metric.interface?.ipv4 || "",
+          ipv6: metric.interface?.ipv6 || "",
+          ipv6LinkLocal: metric.interface?.ipv6LinkLocal || "",
+          mac: metric.interface?.mac || "",
+          mtu: metric.interface?.mtu || 0,
+          status: metric.interface?.status || "",
+          traffic: {
+            total: [
+              metric.interface?.traffic?.total?.[0] || 0, // Tx
+              metric.interface?.traffic?.total?.[1] || 0, // Rx
+            ],
+            current: [
+              metric.interface?.traffic?.current?.[0] || 0, // Tx
+              metric.interface?.traffic?.current?.[1] || 0, // Rx
+            ],
+            metric: (metric.interface?.traffic?.metric || []).map((m) =>
+              m.length === 3 ? [m[0], m[1], m[2]] : []
+            ),
           },
         },
-      },
-      interface: {
-        ipv4: metric.interface?.ipv4 || "",
-        ipv6: metric.interface?.ipv6 || "",
-        ipv6LinkLocal: metric.interface?.ipv6LinkLocal || "",
-        mac: metric.interface?.mac || "",
-        mtu: metric.interface?.mtu || 0,
-        status: metric.interface?.status || "",
-        traffic: {
-          total: [
-            metric.interface?.traffic?.total?.[0] || 0, // Tx
-            metric.interface?.traffic?.total?.[1] || 0, // Rx
-          ],
-          current: [
-            metric.interface?.traffic?.current?.[0] || 0, // Tx
-            metric.interface?.traffic?.current?.[1] || 0, // Rx
-          ],
-          metric: (metric.interface?.traffic?.metric || []).map((m) =>
-            m.length === 3 ? [m[0], m[1], m[2]] : []
+        rtt: {
+          current: metric.rtt?.current || 0,
+          metric: (metric.rtt?.metric || []).map((m) =>
+            m.length === 2 ? [m[0], m[1]] : []
           ),
         },
-      },
-      rtt: {
-        current: metric.rtt?.current || 0,
-        metric: (metric.rtt?.metric || []).map((m) =>
-          m.length === 2 ? [m[0], m[1]] : []
-        ),
-      },
-    });
+      })
+    );
 
-    asnPeers[metric.uuid] = {
-      state: metric.bgp?.state || "",
-      info: metric.bgp?.info || "",
-    };
+    asnPeers[metric.uuid] =
+      metric.bgp?.map((entry) => {
+        return {
+          name: entry.name || "",
+          state: entry.state || "",
+          info: entry.info || "",
+        };
+      }) || [];
   }
 
   if (metrics.length) {
     for (const [asn, dict] of enumMap.entries()) {
-      multi.set(`enum:${asn}`, dict);
+      multi.set(`enum:${asn}`, JSON.stringify(dict));
     }
 
     try {
       const results = await multi.exec();
       for (let i = 0; i < results.length; i++) {
-        const { err, result } = results[i];
+        const [err, result] = results[i];
         if (err || result !== "OK") {
           c.var.app.logger
             .getLogger("app")
-            .error(`Error writing metric data to redis: ${err || result}`);
+            .error(
+              `Error writing metric data to redis: error: "${err}", result: "${result}"`
+            );
         }
       }
     } catch (error) {

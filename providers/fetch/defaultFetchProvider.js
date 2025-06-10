@@ -7,7 +7,21 @@ export class DefaultFetchProvider {
 
   async send(url, options = {}, dataType = 'json') {
     const finalOptions = { ...options };
-    Object.assign(finalOptions, this.fetchSettings.fetch.options || {});
+    const optionsToMerge = this.fetchSettings.fetch.options || {};
+
+    // Deep merge the headers instead of overwriting them
+    if (finalOptions.headers) {
+      finalOptions.headers = { 
+        ...finalOptions.headers, 
+        ...optionsToMerge.headers 
+      };
+      // Create a new options object without headers to prevent double-processing
+      const { headers, ...restOptions } = optionsToMerge;
+      Object.assign(finalOptions, restOptions);
+    } else {
+      Object.assign(finalOptions, optionsToMerge);
+    }
+
     try {
       const response = await this._fetch(new URL(url), finalOptions);
       if (response.status !== 200 && this.fetchSettings.logging) {
@@ -34,10 +48,9 @@ export class DefaultFetchProvider {
 
   async get(url, dataType = 'json', options = {}) {
     const finalOptions = options;
-    Object.assign(finalOptions, { method: 'GET' });
+    finalOptions.method = 'GET';
     return await this.send(url, finalOptions, dataType);
   }
-
   async post(url, data, dataType = 'json', options = {}) {
     let _data = data;
     if (dataType === 'json') {
@@ -46,13 +59,25 @@ export class DefaultFetchProvider {
     const POST_OPTIONS = {
       method: 'POST',
       body: _data,
-      header: {
+      headers: {
         'Content-Type': this.getContentType(dataType)
       }
     };
-    const finalOptions = options;
-    Object.assign(finalOptions, POST_OPTIONS);
-    return await this.send(url, finalOptions, dataType);
+    
+    // Deep merge the headers instead of overwriting them
+    if (options.headers) {
+      POST_OPTIONS.headers = { 
+        ...POST_OPTIONS.headers, 
+        ...options.headers 
+      };
+      // Create a new options object without headers to prevent double-processing
+      const { headers, ...restOptions } = options;
+      Object.assign(POST_OPTIONS, restOptions);
+    } else {
+      Object.assign(POST_OPTIONS, options);
+    }
+
+    return await this.send(url, POST_OPTIONS, dataType);
   }
 
   getContentType(dataType) {
