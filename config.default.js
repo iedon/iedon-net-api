@@ -21,52 +21,59 @@ export default {
           type: 'stdout'
         },
         app: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/app/app.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         },
         acorle: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/acorle/acorle.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         },
         mail: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/mail/mail.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         },
         whois: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/whois/whois.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         },
         fetch: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/fetch/fetch.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         },
         auth: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/auth/auth.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         },
         ssh: {
-          type: 'dateFile',
+          type: 'file',
           filename: './logs/ssh/ssh.log',
           compress: true,
-          numBackups: 7,
+          backups: 7,
+          maxLogSize: 10485760,
           keepFileExt: true
         }
       },
@@ -132,12 +139,13 @@ export default {
     stateSignOptions: {
       algorithm: 'HS256',
       expiresIn: '10m'    // where sign-in state(via mail, pgp, ssh) expires
-    }
+    },
+    agentApiKey: '__DEMO__AGENT_API_TOKEN__', // PeerAPIConfig.secret in agent
   },
 
   sshAuthServerSettings: { // This app will starts a ssh server to accept connections to auth with us
     provider: 'default',
-    challengeHint: 'ssh -o "IdentitiesOnly=yes" -i ~/.ssh/id_rsa|ed25519 iedon.net -p 4222',
+    challengeHint: 'ssh [-o "IdentitiesOnly=yes" -i ~/.ssh/id_rsa|ed25519] iedon.net -p 4222',
     ssh2: {
       listen: {
         type: 'tcp', // tcp or unix
@@ -150,9 +158,13 @@ export default {
       ],
       timeoutSeconds: 120,
       bannerText: [
-        '========================================',
-        'Welcome to the iEdon PeerAPI DN42 Auth Server!',
-        '========================================',
+        '==================================================',
+        'Welcome to the IEDON-NET DN42 Auth Server!',
+        'Kopiere den folgenden Herausforderungstext, um dich anzumelden.',
+        'サインインするには、次のチャレンジテキストをコピーしてください。',
+        '複製以下挑戰文本以登入。',
+        '复制以下挑战文本以登录。',
+        '==================================================',
       ]
     }
   },
@@ -171,7 +183,21 @@ export default {
       idle: 10000
     },
     logging: true,
+    alter: false,        // set to true to alter database schema on startup
     dialectOptions: {}
+  },
+
+  redisSettings: {
+    driver: {
+      host: 'localhost',
+      port: 6379,
+      username: "default", // needs Redis >= 6
+      password: '',
+      db: 0,
+      keyPrefix: 'peerapi:',
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false
+    }
   },
 
   mailSettings: {
@@ -179,6 +205,12 @@ export default {
     provider: 'default',    // change to nodemailer to use smtp and fill configuration section bellow
     senderEmailAddress: 'dn42@localhost.localdomain',
     logging: true,
+    limit: {
+      maxEmailsPerDay: 500,
+      maxEmailsPerHour: 100,
+      maxEmailsPerMinute: 10
+    },
+    templateFile: './emailTemplate.html', // path to email template file
     nodemailer: {
       host: 'smtp.localhost.localdomain',
       port: 465,
@@ -188,7 +220,7 @@ export default {
         pass: ''
       }
     },
-    acorle: {               // configuration for acorle mail provider(via microservice)
+    acorle: {                           // configuration for acorle mail provider(via microservice)
       serviceKey: 'dn42_send_mail'      // service key for RPC
     }
   },
