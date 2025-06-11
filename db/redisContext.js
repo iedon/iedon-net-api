@@ -7,8 +7,28 @@ export async function useRedisContext(app, redisSettings) {
   redis.on("error", (err) => {
     dbLogger.error(err);
   });
-
   await redis.connect();
+
+  // Define custom command for merging enum data atomically
+  redis.defineCommand("mergeEnum", {
+    numberOfKeys: 1,
+    lua: `
+      local key = KEYS[1]
+      local newData = cjson.decode(ARGV[1])
+      local existing = redis.call('GET', key)
+      local merged = {}
+      
+      if existing then
+        merged = cjson.decode(existing)
+      end
+      
+      for uuid, peers in pairs(newData) do
+        merged[uuid] = peers
+      end
+      
+      return redis.call('SET', key, cjson.encode(merged))
+    `,
+  });
 
   app.redis = {
     setData: async (key, data) => {

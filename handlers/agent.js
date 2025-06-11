@@ -148,7 +148,10 @@ async function modify(c) {
     const currentSession = await getBgpSession(c, sessionUuid);
     if (!currentSession) return makeResponse(c, RESPONSE_CODE.NOT_FOUND);
 
-    const [url, agentSecret] = await getRouterCbParams(c, currentSession.router);
+    const [url, agentSecret] = await getRouterCbParams(
+      c,
+      currentSession.router
+    );
     if (!url || !agentSecret) {
       return makeResponse(c, RESPONSE_CODE.ROUTER_OPERATION_FAILED);
     }
@@ -160,11 +163,13 @@ async function modify(c) {
       await modifyDbSessionStatus(c, sessionUuid, status);
     }
 
-    requestAgentToSync(c, url, agentSecret, currentSession.router).catch((error) => {
-      c.var.app.logger
-        .getLogger("fetch")
-        .error(`Failed to request agent to sync: ${error}`);
-    });
+    requestAgentToSync(c, url, agentSecret, currentSession.router).catch(
+      (error) => {
+        c.var.app.logger
+          .getLogger("fetch")
+          .error(`Failed to request agent to sync: ${error}`);
+      }
+    );
   } catch (error) {
     c.var.app.logger.getLogger("app").error(error);
     return makeResponse(c, RESPONSE_CODE.SERVER_ERROR);
@@ -178,123 +183,158 @@ async function report(c) {
     return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
   }
 
-  const enumMap = new Map();
-  const multi = c.var.app.redis.getInstance().multi({ pipeline: true });
-  for (let i = 0; i < metrics.length; i++) {
-    const metric = metrics[i];
-    if (!metric.uuid) continue;
+  try {
+    const enumMap = new Map();
+    const redis = c.var.app.redis.getInstance();
+    const multi = redis.multi({ pipeline: true });
 
-    if (!enumMap.has(metric.asn)) enumMap.set(metric.asn, {});
-    const asnPeers = enumMap.get(metric.asn);
-    if (!asnPeers) continue;
+    for (let i = 0; i < metrics.length; i++) {
+      const metric = metrics[i];
+      if (!metric.uuid) continue;
 
-    multi.set(
-      `session:${metric.uuid}`,
-      JSON.stringify({
-        uuid: metric.uuid || "",
-        asn: metric.asn || 0,
-        timestamp: metric.timestamp || 0,
-        bgp: metric.bgp?.map((entry) => {
+      // Collect enum data for this ASN
+      if (!enumMap.has(metric.asn)) enumMap.set(metric.asn, {});
+      const asnPeers = enumMap.get(metric.asn);
+      if (!asnPeers) continue;
+
+      // Add session data to multi pipeline
+      multi.set(
+        `session:${metric.uuid}`,
+        JSON.stringify({
+          uuid: metric.uuid || "",
+          asn: metric.asn || 0,
+          timestamp: metric.timestamp || 0,
+          bgp: metric.bgp?.map((entry) => {
+            return {
+              name: entry.name || "",
+              state: entry.state || "",
+              info: entry.info || "",
+              routes: {
+                ipv4: {
+                  imported: {
+                    current: entry.routes?.ipv4?.imported?.current || 0,
+                    metric: (entry.routes?.ipv4?.imported?.metric || []).map(
+                      (m) => (m.length === 2 ? [m[0], m[1]] : [])
+                    ),
+                  },
+                  exported: {
+                    current: entry.routes?.ipv4?.exported?.current || 0,
+                    metric: (entry.routes?.ipv4?.exported?.metric || []).map(
+                      (m) => (m.length === 2 ? [m[0], m[1]] : [])
+                    ),
+                  },
+                },
+                ipv6: {
+                  imported: {
+                    current: entry.routes?.ipv6?.imported?.current || 0,
+                    metric: (entry.routes?.ipv6?.imported?.metric || []).map(
+                      (m) => (m.length === 2 ? [m[0], m[1]] : [])
+                    ),
+                  },
+                  exported: {
+                    current: entry.routes?.ipv6?.exported?.current || 0,
+                    metric: (entry.routes?.ipv6?.exported?.metric || []).map(
+                      (m) => (m.length === 2 ? [m[0], m[1]] : [])
+                    ),
+                  },
+                },
+              },
+            };
+          }),
+          interface: {
+            ipv4: metric.interface?.ipv4 || "",
+            ipv6: metric.interface?.ipv6 || "",
+            ipv6LinkLocal: metric.interface?.ipv6LinkLocal || "",
+            mac: metric.interface?.mac || "",
+            mtu: metric.interface?.mtu || 0,
+            status: metric.interface?.status || "",
+            traffic: {
+              total: [
+                metric.interface?.traffic?.total?.[0] || 0, // Tx
+                metric.interface?.traffic?.total?.[1] || 0, // Rx
+              ],
+              current: [
+                metric.interface?.traffic?.current?.[0] || 0, // Tx
+                metric.interface?.traffic?.current?.[1] || 0, // Rx
+              ],
+              metric: (metric.interface?.traffic?.metric || []).map((m) =>
+                m.length === 3 ? [m[0], m[1], m[2]] : []
+              ),
+            },
+          },
+          rtt: {
+            current: metric.rtt?.current || 0,
+            metric: (metric.rtt?.metric || []).map((m) =>
+              m.length === 2 ? [m[0], m[1]] : []
+            ),
+          },
+        })
+      );
+
+      asnPeers[metric.uuid] =
+        metric.bgp?.map((entry) => {
           return {
             name: entry.name || "",
             state: entry.state || "",
             info: entry.info || "",
-            routes: {
-              ipv4: {
-                imported: {
-                  current: entry.routes?.ipv4?.imported?.current || 0,
-                  metric: (entry.routes?.ipv4?.imported?.metric || []).map(
-                    (m) => (m.length === 2 ? [m[0], m[1]] : [])
-                  ),
-                },
-                exported: {
-                  current: entry.routes?.ipv4?.exported?.current || 0,
-                  metric: (entry.routes?.ipv4?.exported?.metric || []).map(
-                    (m) => (m.length === 2 ? [m[0], m[1]] : [])
-                  ),
-                },
-              },
-              ipv6: {
-                imported: {
-                  current: entry.routes?.ipv6?.imported?.current || 0,
-                  metric: (entry.routes?.ipv6?.imported?.metric || []).map(
-                    (m) => (m.length === 2 ? [m[0], m[1]] : [])
-                  ),
-                },
-                exported: {
-                  current: entry.routes?.ipv6?.exported?.current || 0,
-                  metric: (entry.routes?.ipv6?.exported?.metric || []).map(
-                    (m) => (m.length === 2 ? [m[0], m[1]] : [])
-                  ),
-                },
-              },
-            },
           };
-        }),
-        interface: {
-          ipv4: metric.interface?.ipv4 || "",
-          ipv6: metric.interface?.ipv6 || "",
-          ipv6LinkLocal: metric.interface?.ipv6LinkLocal || "",
-          mac: metric.interface?.mac || "",
-          mtu: metric.interface?.mtu || 0,
-          status: metric.interface?.status || "",
-          traffic: {
-            total: [
-              metric.interface?.traffic?.total?.[0] || 0, // Tx
-              metric.interface?.traffic?.total?.[1] || 0, // Rx
-            ],
-            current: [
-              metric.interface?.traffic?.current?.[0] || 0, // Tx
-              metric.interface?.traffic?.current?.[1] || 0, // Rx
-            ],
-            metric: (metric.interface?.traffic?.metric || []).map((m) =>
-              m.length === 3 ? [m[0], m[1], m[2]] : []
-            ),
-          },
-        },
-        rtt: {
-          current: metric.rtt?.current || 0,
-          metric: (metric.rtt?.metric || []).map((m) =>
-            m.length === 2 ? [m[0], m[1]] : []
-          ),
-        },
-      })
-    );
-
-    asnPeers[metric.uuid] =
-      metric.bgp?.map((entry) => {
-        return {
-          name: entry.name || "",
-          state: entry.state || "",
-          info: entry.info || "",
-        };
-      }) || [];
-  }
-
-  if (metrics.length) {
-    for (const [asn, dict] of enumMap.entries()) {
-      multi.set(`enum:${asn}`, JSON.stringify(dict));
+        }) || [];
     }
 
-    try {
-      const results = await multi.exec();
-      for (let i = 0; i < results.length; i++) {
-        const [err, result] = results[i];
+    // Execute session data updates first
+    if (metrics.length) {
+      // Execute all session metric updates in a single command
+      const sessionResults = await multi.exec();
+      for (let i = 0; i < sessionResults.length; i++) {
+        const [err, result] = sessionResults[i];
         if (err || result !== "OK") {
           c.var.app.logger
             .getLogger("app")
             .error(
-              `Error writing metric data to redis: error: "${err}", result: "${result}"`
+              `Error writing session data to redis: error: "${err}", result: "${result}"`
             );
         }
       }
-    } catch (error) {
-      c.var.app.logger
-        .getLogger("app")
-        .error(`Error executing Redis batch: ${error}`);
-      return makeResponse(c, RESPONSE_CODE.SERVER_ERROR);
-    }
-  }
 
+      // Atomically update enum data for each ASN using defined command (batched concurrent)
+      const BATCH_SIZE = 5; // Process 5 ASNs concurrently per batch
+      const enumEntries = Array.from(enumMap.entries());
+      const allEnumResults = [];
+
+      for (let i = 0; i < enumEntries.length; i += BATCH_SIZE) {
+        const batch = enumEntries.slice(i, i + BATCH_SIZE);
+        const batchPromises = batch.map(([asn, dict]) =>
+          redis
+            .mergeEnum(`enum:${asn}`, JSON.stringify(dict))
+            .then(() => ({ status: "fulfilled", asn }))
+            .catch((error) => ({ status: "rejected", asn, error }))
+        );
+
+        const batchResults = await Promise.allSettled(batchPromises);
+        allEnumResults.push(...batchResults);
+      }
+
+      // Log any failures
+      allEnumResults.forEach((result, index) => {
+        if (result.status === "rejected") {
+          const asn = enumEntries[index][0];
+          c.var.app.logger
+            .getLogger("app")
+            .error(`Error updating enum data for ASN ${asn}: ${result.reason}`);
+        } else if (result.value.status === "rejected") {
+          c.var.app.logger
+            .getLogger("app")
+            .error(
+              `Error updating enum data for ASN ${result.value.asn}: ${result.value.error}`
+            );
+        }
+      });
+    }
+  } catch (error) {
+    c.var.app.logger
+      .getLogger("app")
+      .error(`Error executing Redis operations: ${error}`);
+    return makeResponse(c, RESPONSE_CODE.SERVER_ERROR);
+  }
   return makeResponse(c, RESPONSE_CODE.OK);
 }
