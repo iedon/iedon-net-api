@@ -36,5 +36,13 @@ export async function sendAuthMail(c, to, person, code) {
       <p>Have a great day!</p>`
     );
 
-  return await c.var.app.mail.send(to, "Your DN42 Authentication Code", html);
+  return await c.var.app.mail.send(to, "Your DN42 Authentication Code", html, {
+    attachments: [
+      {
+        filename: "logo.png",
+        path: "./logo.png",
+        cid: "logo",
+      },
+    ],
+  });
 }

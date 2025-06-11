@@ -5,7 +5,7 @@ export class AcorleMailProvider extends DefaultMailProvider {
     super(app, mailSettings);
   }
 
-  async send(to, subject, content) {
+  async send(to, subject, content, _) {
     try {
       const result = JSON.parse(
         await this.app.acorle.requestPeerService(

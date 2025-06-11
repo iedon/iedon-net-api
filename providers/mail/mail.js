@@ -8,7 +8,7 @@ export async function useMail(app, mailSettings = {}) {
   app.mail = new (await import(`./${pn}.js`))[handlerName](app, mailSettings);
   if (typeof app.mail.send === "function") {
     const originalSend = app.mail.send.bind(app.mail);
-    app.mail.send = async (to, subject, content) => {
+    app.mail.send = async (to, subject, content, passthrough) => {
       if (
         perDay >= mailSettings.limit.maxEmailsPerDay ||
         perHour >= mailSettings.limit.maxEmailsPerHour ||
@@ -24,7 +24,7 @@ export async function useMail(app, mailSettings = {}) {
       perDay++;
       perHour++;
       perMinute++;
-      return await originalSend(to, subject, content);
+      return await originalSend(to, subject, content, passthrough);
     };
   }
 

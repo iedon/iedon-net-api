@@ -6,16 +6,18 @@ export class NodemailerMailProvider extends DefaultMailProvider {
     super(app, mailSettings);
   }
 
-  async send(to, subject, content) {
+  async send(to, subject, content, passthrough) {
     return new Promise((resolve, _) => {
+      const options = {
+        from: this.mailSettings.senderEmailAddress,
+        to,
+        subject,
+        text: "See HTML content",
+        html: content,
+      };
+      if (passthrough) Object.assign(options, passthrough);
       createTransport(this.mailSettings.nodemailer).sendMail(
-        {
-          from: this.mailSettings.senderEmailAddress,
-          to,
-          subject,
-          text: "See HTML content",
-          html: content,
-        },
+        options,
         (error, info) => {
           if (error) {
             if (this.mailSettings.logging) this.logger.error(error);

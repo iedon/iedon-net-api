@@ -209,6 +209,7 @@ async function report(c) {
               name: entry.name || "",
               state: entry.state || "",
               info: entry.info || "",
+              type: entry.type || "",
               routes: {
                 ipv4: {
                   imported: {
