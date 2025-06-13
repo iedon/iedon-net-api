@@ -1,9 +1,9 @@
 import { makeResponse, RESPONSE_CODE } from "./common/packet.js";
-import { nullOrEmpty } from './common/helper.js';
+import { nullOrEmpty } from "./common/helper.js";
 
 export function requestMiddleware(app) {
   app.server.use(async (c, next) => {
-    c.set('app', app);
+    c.set("app", app);
 
     setSecurityHeaders(c);
     setCustomHeaders(c, app.settings.corsHeaders);
@@ -13,18 +13,21 @@ export function requestMiddleware(app) {
       return makeResponse(c, RESPONSE_CODE.SERVICE_UNAVAILABLE);
     }
 
-    if (c.req.method === 'OPTIONS') {
+    if (c.req.method === "OPTIONS") {
       return handlePreflightRequest(c, app.settings.preflightHeaders);
     }
 
-    if (c.req.method === 'POST') {
-      if (Number(c.req.header('Content-Length')) > 1048576) {
+    if (c.req.method === "POST") {
+      if (
+        Number(c.req.header("Content-Length")) > 10485760 &&
+        !c.req.path.startsWith("/agent/") // Do not limit body size for agent requests, since it sends metrics
+      ) {
         return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
       }
 
       try {
-        c.set('body', (await c.req.json()) || {});
-      } catch (error) {
+        c.set("body", (await c.req.json()) || {});
+      } catch {
         // Bad request body / io error
         return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
       }
@@ -41,11 +44,11 @@ export function requestMiddleware(app) {
         return makeResponse(c, RESPONSE_CODE.UNAUTHORIZED);
       }
 
-      c.set('state', state);
+      c.set("state", state);
 
       await next();
     } catch (error) {
-      app.logger.getLogger('app').error(error);
+      app.logger.getLogger("app").error(error);
       return makeResponse(c, RESPONSE_CODE.SERVER_ERROR);
     }
   });
@@ -53,12 +56,12 @@ export function requestMiddleware(app) {
 
 function setSecurityHeaders(c) {
   const headers = {
-    'X-Content-Type-Options': 'nosniff',
-    'X-Download-Options': 'noopen',
-    'X-Frame-Options': 'SAMEORIGIN',
-    'X-XSS-Protection': '1; mode=block',
-    'Pragma': 'no-cache',
-    'Cache-Control': 'no-store, no-cache'
+    "X-Content-Type-Options": "nosniff",
+    "X-Download-Options": "noopen",
+    "X-Frame-Options": "SAMEORIGIN",
+    "X-XSS-Protection": "1; mode=block",
+    Pragma: "no-cache",
+    "Cache-Control": "no-store, no-cache",
   };
   Object.entries(headers).forEach(([key, value]) => c.header(key, value));
 }
@@ -70,19 +73,21 @@ function setCustomHeaders(c, customHeaders) {
 function handlePreflightRequest(c, preflightHeaders) {
   setCustomHeaders(c, preflightHeaders);
   c.status(204);
-  return c.text('');
+  return c.text("");
 }
 
 function isPublicUrl(url) {
   // Agent requests will be verified in agentHandler seperately
-  return url === '/auth' || url.startsWith('/agent/') || url.startsWith('/list/');
+  return (
+    url === "/auth" || url.startsWith("/agent/") || url.startsWith("/list/")
+  );
 }
 
 async function verifyAndGetState(app, c) {
-  const header = c.req.header('Authorization');
+  const header = c.req.header("Authorization");
   if (!header) return null;
 
-  const token = header.split('Bearer\x20')[1];
+  const token = header.split("Bearer\x20")[1];
   if (!token) return null;
 
   const state = await app.token.verify(token);

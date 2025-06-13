@@ -278,6 +278,7 @@ async function report(c) {
             name: entry.name || "",
             state: entry.state || "",
             info: entry.info || "",
+            type: entry.type || "",
           };
         }) || [];
     }
@@ -298,7 +299,7 @@ async function report(c) {
       }
 
       // Atomically update enum data for each ASN using defined command (batched concurrent)
-      const BATCH_SIZE = 5; // Process 5 ASNs concurrently per batch
+      const BATCH_SIZE = 10; // Process 5 ASNs concurrently per batch
       const enumEntries = Array.from(enumMap.entries());
       const allEnumResults = [];
 
