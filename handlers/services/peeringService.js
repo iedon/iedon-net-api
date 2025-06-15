@@ -307,6 +307,7 @@ export async function enumPeeringSessions(c, enumAll = false) {
               name: s.name || "",
               state: s.state || "",
               info: s.info || "",
+              type: s.type || "",
             };
           });
           Object.assign(data, {
