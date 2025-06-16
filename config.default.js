@@ -283,6 +283,11 @@ export default {
     }
   },
 
+  metricSettings: {
+    maxRecordsToKeep: 288, // 288 records = 24 hours with 5 minutes interval
+    redisLockTimeoutMs: 10000, // 10 seconds
+  },
+
   // Configure CORS, preflight headers and custom headers here
   preflightHeaders: {
     'Access-Control-Request-Method': 'POST',
