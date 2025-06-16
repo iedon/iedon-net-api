@@ -375,7 +375,9 @@ async function report(c) {
           try {
             await redis.del(lockKey);
           } catch (err) {
-            dbLogger.error(`Error releasing lock for key ${lockKey}:`, err);
+            c.var.app.logger
+              .getLogger("app")
+              .error(`Error releasing lock for key ${lockKey}:`, err);
           }
         }
       });
