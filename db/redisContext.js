@@ -36,7 +36,7 @@ export async function useRedisContext(app, redisSettings) {
         return await redis.set(
           key,
           JSON.stringify(data)
-        ) === "OK"; // Set with expiry
+        ) === "OK";
       } catch (err) {
         dbLogger.error(`Error writing data to redis for key ${key}:`, err);
         return false;
