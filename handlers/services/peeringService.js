@@ -92,6 +92,8 @@ export async function getBgpSession(c, uuid, transaction = null) {
       "data",
       "mtu",
       "policy",
+      "created_at",
+      "updated_at"
     ],
     where: {
       uuid,
@@ -117,6 +119,8 @@ export async function getBgpSession(c, uuid, transaction = null) {
         data: result.dataValues.data ? JSON.parse(result.dataValues.data) : "",
         mtu: result.dataValues.mtu,
         policy: result.dataValues.policy,
+        createdAt: result.dataValues.created_at,
+        updatedAt: result.dataValues.updated_at
       }
     : null;
 }
@@ -263,6 +267,8 @@ export async function enumPeeringSessions(c, enumAll = false) {
         "data",
         "mtu",
         "policy",
+        "created_at",
+        "updated_at"
       ],
     };
     if (!enumAll) {
@@ -293,6 +299,8 @@ export async function enumPeeringSessions(c, enumAll = false) {
           : "",
         mtu: result[i].dataValues.mtu,
         policy: result[i].dataValues.policy,
+        createdAt: result[i].dataValues.created_at,
+        updatedAt: result[i].dataValues.updated_at
       };
       let hasCache = enumCache.has(data.asn);
       const summary = hasCache
