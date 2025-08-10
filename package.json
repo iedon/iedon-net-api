@@ -9,16 +9,16 @@
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "hono": "^4.7.10",
-    "ioredis": "^5.6.1",
+    "hono": "^4.9.0",
+    "ioredis": "^5.7.0",
     "jsonwebtoken": "^9.0.2",
     "log4js": "^6.9.1",
-    "mysql2": "^3.14.1",
-    "nodemailer": "^7.0.3",
-    "openpgp": "^6.1.1",
+    "mysql2": "^3.14.3",
+    "nodemailer": "^7.0.5",
+    "openpgp": "^6.2.0",
     "sequelize": "^7.0.0-alpha.4",
     "sqlite3": "^5.1.7",
     "ssh2": "^1.16.0",
-    "whois": "^2.14.2"
+    "whois": "^2.15.0"
   }
 }
