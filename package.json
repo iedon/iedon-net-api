@@ -1,11 +1,11 @@
 {
   "name": "iedon-peerapi",
   "type": "module",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "scripts": {
-    "prod": "bun run app.js",
-    "dev": "bun --watch app.js"
+    "prod": "NODE_ENV=production bun app.js",
+    "dev": "NODE_ENV=development bun --watch app.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

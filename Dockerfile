@@ -29,4 +29,4 @@ RUN cd ./acorle-sdk && bun install --frozen-lockfile --production
 
 # run the app
 EXPOSE 3000 4222
-ENTRYPOINT [ "bun", "run", "app.js" ]
+ENTRYPOINT [ "bun", "run", "prod" ]
