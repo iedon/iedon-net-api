@@ -42,7 +42,7 @@ export default async function (c) {
 
   switch (action) {
     case "report":
-      return await report(c);
+      return await report(c, router);
     case "heartbeat":
       return await heartbeat(c, router);
     case "sessions":
@@ -177,7 +177,7 @@ async function modify(c) {
   return makeResponse(c, RESPONSE_CODE.OK);
 }
 
-async function report(c) {
+async function report(c, router) {
   const { metrics } = c.var.body;
   if (!metrics || !Array.isArray(metrics)) {
     return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
@@ -242,6 +242,7 @@ async function report(c) {
             uuid: metric.uuid || "",
             asn: metric.asn || 0,
             timestamp: metric.timestamp || 0,
+            router: router || "",
             bgp: metric.bgp?.map((entry) => {
               const existingBgp =
                 existingData?.bgp?.find((e) => e.name === entry.name) || {};

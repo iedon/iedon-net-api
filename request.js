@@ -78,8 +78,12 @@ function handlePreflightRequest(c, preflightHeaders) {
 
 function isPublicUrl(url) {
   // Agent requests will be verified in agentHandler seperately
+  // Metric endpoint is public but access is restricted by Basic Auth in metricsHandler, separately
   return (
-    url === "/auth" || url.startsWith("/agent/") || url.startsWith("/list/")
+    url === "/auth" ||
+    url.startsWith("/agent/") ||
+    url.startsWith("/list/") ||
+    url === "/metrics"
   );
 }
 
