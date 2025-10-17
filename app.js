@@ -143,7 +143,7 @@ const registerAcorleServices = (app, AcorleService) => {
 };
 
 // Export module with server fetch method and other settings
-const module = {
+const serverModule = {
   fetch: app.server.fetch,
   port: localSettings.listen.port,
   hostname: localSettings.listen.hostname,
@@ -151,7 +151,10 @@ const module = {
 
 // Add Unix socket path if applicable
 if (localSettings.listen.type === 'unix') {
-  module.unix = localSettings.listen.path;
+  serverModule.unix = localSettings.listen.path;
 }
 
-export default module;
+const isProduction = (process.env?.NODE_ENV || '').toLowerCase() === 'production';
+serverModule.development = !isProduction;
+
+export default serverModule;

@@ -1,24 +1,24 @@
 {
   "name": "iedon-peerapi",
   "type": "module",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "scripts": {
-    "prod": "bun run app.js",
-    "dev": "bun --watch app.js"
+    "prod": "NODE_ENV=production bun app.js",
+    "dev": "NODE_ENV=development bun --watch app.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "hono": "^4.9.0",
-    "ioredis": "^5.7.0",
+    "hono": "^4.10.0",
+    "ioredis": "^5.8.1",
     "jsonwebtoken": "^9.0.2",
     "log4js": "^6.9.1",
-    "mysql2": "^3.14.3",
-    "nodemailer": "^7.0.5",
-    "openpgp": "^6.2.0",
+    "mysql2": "^3.15.2",
+    "nodemailer": "^7.0.9",
+    "openpgp": "^6.2.2",
     "sequelize": "^7.0.0-alpha.4",
     "sqlite3": "^5.1.7",
-    "ssh2": "^1.16.0",
+    "ssh2": "^1.17.0",
     "whois": "^2.15.0"
   }
 }

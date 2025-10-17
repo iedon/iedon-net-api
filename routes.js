@@ -5,6 +5,7 @@ import tokenHandler from './handlers/token.js';
 import peeringHandler from './handlers/peering.js';
 import settingsHandler from './handlers/settings.js';
 import agentHandler from './handlers/agent.js';
+import metricsHandler from './handlers/metrics.js';
 
 export function registerRoutes(app) {
   app.server.post('/admin', adminHandler)
@@ -14,5 +15,6 @@ export function registerRoutes(app) {
   .post('/session', peeringHandler)
   .post('/settings', settingsHandler)
   .get('/agent/:router/:action', agentHandler)
-  .post('/agent/:router/:action', agentHandler);
+  .post('/agent/:router/:action', agentHandler)
+  .get('/metrics', metricsHandler);
 }

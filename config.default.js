@@ -286,6 +286,15 @@ export default {
   metricSettings: {
     maxRecordsToKeep: 288, // 288 records = 24 hours with 5 minutes interval
     redisLockTimeoutMs: 10000, // 10 seconds
+    exporter: {
+      scannerBatchSize: 200, // number of keys to scan in one batch when exporting metrics
+      allowedBasicAuthUsers: [ // Recommended HTTPS endpoint
+        {
+          username: 'admin',
+          password: 'admin'
+        }
+      ]
+    }
   },
 
   // Configure CORS, preflight headers and custom headers here
@@ -302,6 +311,6 @@ export default {
   },
 
   customHeaders: {
-    'X-Powered-By': 'PHP/8.2.6'
+    'X-Powered-By': 'PHP/8.4.11'
   }
 }
