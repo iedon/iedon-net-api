@@ -34,7 +34,7 @@ const METRIC_DEFINITIONS = [
   {
     name: "peerapi_bgp_session_state",
     type: "gauge",
-    help: "Numeric BGP session state (idle=0, connect=1, active=2, openSent=3, openConfirm=4, established=5, unknown=-1).",
+    help: "Numeric BGP session state (up=5,down=4,start=3,stop=2,flush=1,other=0).",
   },
   {
     name: "peerapi_bgp_routes_current_total",
@@ -44,13 +44,12 @@ const METRIC_DEFINITIONS = [
 ];
 
 const BGP_STATE_VALUES = [
-  { key: "established", value: 5 },
-  { key: "openconfirm", value: 4 },
-  { key: "opensent", value: 3 },
-  { key: "active", value: 2 },
-  { key: "connect", value: 1 },
-  { key: "idle", value: 0 },
-  { key: "unknown", value: -1 },
+  { key: "up", value: 5 },
+  { key: "down", value: 4 },
+  { key: "start", value: 3 },
+  { key: "stop", value: 2 },
+  { key: "flush", value: 1 },
+  { key: "other", value: 0 },
 ];
 
 const askForBasicAuth = (c) => {
