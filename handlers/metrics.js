@@ -112,24 +112,29 @@ export default async function metricsHandler(c) {
       return respondWithMetrics(c, []);
     }
 
-    const rawValues = await redis.mget(sessionKeys);
     const sessions = [];
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < sessionKeys.length; i += BATCH_SIZE) {
+      const batchKeys = sessionKeys.slice(i, i + BATCH_SIZE);
+      const batchPromises = batchKeys.map((key) =>
+        c.var.app.redis.getData(key)
+      );
+      const batchResults = await Promise.allSettled(batchPromises);
 
-    for (let i = 0; i < rawValues.length; i++) {
-      const value = rawValues[i];
-      if (!value) continue;
-      try {
-        const parsed = JSON.parse(value);
-        if (parsed && typeof parsed === "object") {
-          sessions.push(parsed);
+      batchResults.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          const value = result.value;
+          if (value && typeof value === "object") {
+            sessions.push(value);
+          }
+        } else {
+          app.logger
+            ?.getLogger("app")
+            .warn(
+              `Failed to load session metrics for key ${batchKeys[index]}: ${result.reason}`
+            );
         }
-      } catch (error) {
-        app.logger
-          ?.getLogger("app")
-          .warn(
-            `Failed to parse session metrics for key ${sessionKeys[i]}: ${error}`
-          );
-      }
+      });
     }
 
     return respondWithMetrics(c, sessions);
@@ -148,19 +153,20 @@ export default async function metricsHandler(c) {
 async function collectSessionKeys(c, redis) {
   const keys = [];
   let cursor = "0";
+  const prefix = typeof redis.options?.keyPrefix === "string" ? redis.options.keyPrefix : "";
 
   do {
     const [nextCursor, batch] = await redis.scan(
       cursor,
       "MATCH",
-      "session:*",
+      `${prefix}session:*`,
       "COUNT",
       c.var.app.settings.metricSettings.exporter.scannerBatchSize || 200
     );
-
     if (Array.isArray(batch)) {
       for (const key of batch) {
-        keys.push(key);
+        if (typeof key !== "string") continue;
+        keys.push(prefix && key.startsWith(prefix) ? key.slice(prefix.length) : key);
       }
     }
 
