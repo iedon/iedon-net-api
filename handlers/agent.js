@@ -73,6 +73,7 @@ async function sessions(c, router) {
         "data",
         "mtu",
         "policy",
+        "last_error",
       ],
       where: {
         router,
@@ -99,6 +100,7 @@ async function sessions(c, router) {
           : "",
         mtu: result[i].dataValues.mtu,
         policy: result[i].dataValues.policy,
+        lastError: result[i].dataValues.last_error,
       };
       bgpSessions.push(data);
     }
@@ -132,7 +134,7 @@ async function heartbeat(c, router) {
 }
 
 async function modify(c) {
-  const { status, session } = c.var.body;
+  const { status, session, lastError } = c.var.body;
   const sessionUuid = session;
   if (
     status === undefined ||
@@ -160,7 +162,7 @@ async function modify(c) {
       await deleteDbSession(c, sessionUuid);
       await c.var.app.redis.deleteData(`session:${sessionUuid}`);
     } else {
-      await modifyDbSessionStatus(c, sessionUuid, status);
+      await modifyDbSessionStatus(c, sessionUuid, status, lastError || null);
     }
 
     requestAgentToSync(c, url, agentSecret, currentSession.router).catch(

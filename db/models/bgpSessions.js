@@ -98,6 +98,12 @@ export const initModel = (sequelize) =>
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      lastError: {
+        field: "last_error",
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Error message of current session, if any',
+      },
     },
     {
       indexes: [

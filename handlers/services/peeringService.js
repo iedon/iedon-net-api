@@ -92,6 +92,7 @@ export async function getBgpSession(c, uuid, transaction = null) {
       "data",
       "mtu",
       "policy",
+      "last_error",
       "created_at",
       "updated_at"
     ],
@@ -119,6 +120,7 @@ export async function getBgpSession(c, uuid, transaction = null) {
         data: result.dataValues.data ? JSON.parse(result.dataValues.data) : "",
         mtu: result.dataValues.mtu,
         policy: result.dataValues.policy,
+        lastError: result.dataValues.last_error,
         createdAt: result.dataValues.created_at,
         updatedAt: result.dataValues.updated_at
       }
@@ -202,13 +204,12 @@ export async function generalAgentHandler(c, action) {
         await transaction.rollback();
         return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
     }
-    const rows = await c.var.app.models.bgpSessions.update(
+    await c.var.app.models.bgpSessions.update(
       {
         status: newStatus,
       },
       { where: { uuid: sessionUuid }, transaction }
     );
-    if (rows[0] !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
 
     await transaction.commit();
     requestAgentToSync(c, url, agentSecret, routerUuid).catch((error) => {
@@ -267,6 +268,7 @@ export async function enumPeeringSessions(c, enumAll = false) {
         "data",
         "mtu",
         "policy",
+        "last_error",
         "created_at",
         "updated_at"
       ],
@@ -299,6 +301,7 @@ export async function enumPeeringSessions(c, enumAll = false) {
           : "",
         mtu: result[i].dataValues.mtu,
         policy: result[i].dataValues.policy,
+        lastError: result[i].dataValues.last_error,
         createdAt: result[i].dataValues.created_at,
         updatedAt: result[i].dataValues.updated_at
       };
@@ -671,6 +674,7 @@ export async function setPeeringSession(c, modify = false) {
           data: JSON.stringify(_data),
           mtu: _mtu,
           policy: _policy,
+          lastError: null,
         };
         if (modify && _sessionUuid) {
           await c.var.app.models.bgpSessions.update(
@@ -723,12 +727,14 @@ export async function deleteDbSession(c, sessionUuid) {
   if (rows !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
 }
 
-export async function modifyDbSessionStatus(c, sessionUuid, status) {
-  const rows = await c.var.app.models.bgpSessions.update(
-    { status },
+export async function modifyDbSessionStatus(c, sessionUuid, status, lastError) {
+  await c.var.app.models.bgpSessions.update(
+    {
+      status,
+      lastError: lastError || null,
+    },
     { where: { uuid: sessionUuid } }
   );
-  if (rows[0] !== 1) throw new Error(`Unexpected affected rows. ${rows}`);
 }
 
 export async function requestAgentToSync(c, url, agentSecret, routerUuid) {
