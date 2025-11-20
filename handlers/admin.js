@@ -153,7 +153,7 @@ const handlers = {
       linkTypes,
       extensions,
       agentSecret,
-      availablePolicies,
+      allowedPolicies,
     } = c.var.body;
     const _public = c.var.body.public;
     if (
@@ -173,9 +173,9 @@ const handlers = {
       (!nullOrEmpty(extensions) &&
         (!Array.isArray(extensions) ||
           extensions.some((e) => typeof e !== "string"))) ||
-      (!nullOrEmpty(availablePolicies) &&
-        (!Array.isArray(availablePolicies) ||
-          availablePolicies.some((e) => typeof e !== "number" || isNaN(e)))) ||
+      (!nullOrEmpty(allowedPolicies) &&
+        (!Array.isArray(allowedPolicies) ||
+          allowedPolicies.some((e) => typeof e !== "number" || isNaN(e)))) ||
       (!nullOrEmpty(description) && typeof description !== "string") ||
       (!nullOrEmpty(location) && typeof location !== "string") ||
       (!nullOrEmpty(ipv4) && typeof ipv4 !== "string") ||
@@ -206,7 +206,7 @@ const handlers = {
         ipv6LinkLocal,
         linkTypes: JSON.stringify(linkTypes),
         extensions: JSON.stringify(extensions),
-        allowedPolicies: JSON.stringify(availablePolicies),
+        allowedPolicies: JSON.stringify(allowedPolicies),
         agentSecret,
       };
 
