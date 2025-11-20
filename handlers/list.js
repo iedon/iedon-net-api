@@ -73,6 +73,7 @@ async function routers(c) {
         "ipv6_link_local",
         "link_types",
         "extensions",
+        "allowed_policies"
       ],
       where: {
         public: true,
@@ -98,6 +99,9 @@ async function routers(c) {
       extensions: router.dataValues.extensions
         ? JSON.parse(router.dataValues.extensions)
         : [],
+      allowedPolicies: router.dataValues.allowed_policies
+        ? JSON.parse(router.dataValues.allowed_policies)
+        : []
     }));
 
     // Process in batches of 5 for session counting

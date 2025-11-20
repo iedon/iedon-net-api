@@ -96,7 +96,8 @@ const handlers = {
           "ipv6_link_local",
           "link_types",
           "extensions",
-          "agent_secret"
+          "agent_secret",
+          "allowed_policies",
         ],
       });
       for (let i = 0; i < result.length; i++)
@@ -125,6 +126,9 @@ const handlers = {
             ? JSON.parse(result[i].dataValues.extensions)
             : [],
           agentSecret: result[i].dataValues.agent_secret || "",
+          allowedPolicies: result[i].dataValues.allowed_policies
+            ? JSON.parse(result[i].dataValues.allowed_policies)
+            : [],
         });
     } catch (error) {
       c.var.app.logger.getLogger("app").error(error);
@@ -148,7 +152,8 @@ const handlers = {
       ipv6LinkLocal,
       linkTypes,
       extensions,
-      agentSecret
+      agentSecret,
+      availablePolicies,
     } = c.var.body;
     const _public = c.var.body.public;
     if (
@@ -168,6 +173,9 @@ const handlers = {
       (!nullOrEmpty(extensions) &&
         (!Array.isArray(extensions) ||
           extensions.some((e) => typeof e !== "string"))) ||
+      (!nullOrEmpty(availablePolicies) &&
+        (!Array.isArray(availablePolicies) ||
+          availablePolicies.some((e) => typeof e !== "number" || isNaN(e)))) ||
       (!nullOrEmpty(description) && typeof description !== "string") ||
       (!nullOrEmpty(location) && typeof location !== "string") ||
       (!nullOrEmpty(ipv4) && typeof ipv4 !== "string") ||
@@ -198,6 +206,7 @@ const handlers = {
         ipv6LinkLocal,
         linkTypes: JSON.stringify(linkTypes),
         extensions: JSON.stringify(extensions),
+        allowedPolicies: JSON.stringify(availablePolicies),
         agentSecret,
       };
 

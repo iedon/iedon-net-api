@@ -95,6 +95,14 @@ export const initModel = (sequelize) =>
         allowNull: true,
         comment: 'e.g.: ["mp-bgp", "extended-nexthop"]',
       },
+      allowedPolicies: {
+        field: "allowed_policies",
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: "[0,1,2,3,4]",
+        comment:
+          "ROUTING_POLICY. e.g.: [0, 1, 2, 3, 4] 0: full/transit(send and recv all valid), 1: peer(send own, recv their owned), 2: upstream(send all valid, recv their owned), 3: downstream(send own, recv all valid), 4: upstream, admin/internal only",
+      },
     },
     {
       timestamps: false,

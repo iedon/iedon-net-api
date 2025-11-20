@@ -542,6 +542,7 @@ export async function setPeeringSession(c, modify = false) {
         "ipv6_link_local",
         "link_types",
         "extensions",
+        "allowed_policies"
       ],
       where: {
         uuid: routerUuid,
@@ -556,18 +557,22 @@ export async function setPeeringSession(c, modify = false) {
       return makeResponse(c, RESPONSE_CODE.ROUTER_NOT_AVAILABLE);
     }
 
+    // Validate type, policy and extensions
     let extensions = [];
     try {
       extensions = _extensions;
       const typeExist = JSON.parse(routerQuery.dataValues.link_types).some(
         (type) => type === _type
       );
+      const policyAllowed = JSON.parse(routerQuery.dataValues.allowed_policies).some(
+        (policy) => policy === _policy
+      );
       const extensionExist =
         extensions.length === 0 ||
         extensions.some((_e) =>
           JSON.parse(routerQuery.dataValues.extensions).some((e) => e === _e)
         );
-      if (!typeExist || !extensionExist) {
+      if (!typeExist || !policyAllowed || !extensionExist) {
         await transaction.rollback();
         return makeResponse(c, RESPONSE_CODE.BAD_REQUEST);
       }
