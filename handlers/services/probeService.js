@@ -82,7 +82,7 @@ export const attachProbeSnapshots = async (c, collection, selector) => {
     if (!uuid) continue;
     const snapshot = probeMap.get(uuid);
     if (snapshot) {
-      item.probe = snapshot;
+      item.probe = snapshot || createEmptyProbeSnapshot;
     }
   }
 };
@@ -105,7 +105,7 @@ export const deleteProbeEntries = async (c, sessionUuid) => {
   }
 };
 
-function createEmptyProbeSnapshot() {
+export function createEmptyProbeSnapshot() {
   return {
     [PROBE_FAMILY_IPV4]: createEmptyProbeFamilyState(),
     [PROBE_FAMILY_IPV6]: createEmptyProbeFamilyState(),

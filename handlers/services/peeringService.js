@@ -8,7 +8,7 @@ import {
   bcryptGenHash,
   bcryptGenSalt,
 } from "../../common/helper.js";
-import { getProbeSnapshots, attachProbeSnapshots } from "./probeService.js";
+import { getProbeSnapshots, attachProbeSnapshots, createEmptyProbeSnapshot } from "./probeService.js";
 
 // Routing Policy
 // FULL 0:
@@ -245,11 +245,6 @@ export async function queryPeeringSession(c) {
   }
 
   data.data = session.data || "";
-  const probeSnapshots = await getProbeSnapshots(c, [sessionUuid]);
-  const probe = probeSnapshots.get(sessionUuid);
-  if (probe) {
-    data.probe = probe;
-  }
 
   return makeResponse(c, RESPONSE_CODE.OK, data);
 }
@@ -730,7 +725,12 @@ export async function getPeeringSession(c) {
   if (!(await isUserAdmin(c)) && session.asn !== Number(c.var.state.asn))
     return makeResponse(c, RESPONSE_CODE.NOT_FOUND);
 
-  return makeResponse(c, RESPONSE_CODE.OK, { session });
+  const data = { session };
+  const probeSnapshots = await getProbeSnapshots(c, [sessionUuid]);
+  const probe = probeSnapshots.get(sessionUuid);
+  data.probe = probe || createEmptyProbeSnapshot();
+
+  return makeResponse(c, RESPONSE_CODE.OK, data);
 }
 
 export async function deleteDbSession(c, sessionUuid) {
