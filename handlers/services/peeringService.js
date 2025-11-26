@@ -725,12 +725,11 @@ export async function getPeeringSession(c) {
   if (!(await isUserAdmin(c)) && session.asn !== Number(c.var.state.asn))
     return makeResponse(c, RESPONSE_CODE.NOT_FOUND);
 
-  const data = { session };
   const probeSnapshots = await getProbeSnapshots(c, [sessionUuid]);
   const probe = probeSnapshots.get(sessionUuid);
-  data.probe = probe || createEmptyProbeSnapshot();
+  session.probe = probe || createEmptyProbeSnapshot();
 
-  return makeResponse(c, RESPONSE_CODE.OK, data);
+  return makeResponse(c, RESPONSE_CODE.OK, { session });
 }
 
 export async function deleteDbSession(c, sessionUuid) {
