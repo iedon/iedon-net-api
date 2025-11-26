@@ -236,19 +236,6 @@ class ProbeServer {
   }
 }
 
-function clampPort(port) {
-  const value = Number(port) || 0;
-  if (value < 1 || value > 65535) {
-    return 0;
-  }
-  return value;
-}
-
-function clampPositive(value, min, max) {
-  const numeric = Number(value) || 0;
-  return Math.min(Math.max(numeric, min), max);
-}
-
 function validateLength(length, maxLength) {
   return length > 0 && length <= maxLength;
 }

@@ -13,58 +13,57 @@ export const getProbeSnapshots = async (c, sessionUuids = []) => {
     return result;
   }
 
-  const app = c?.var?.app;
-  const settings = app?.settings?.probeServerSettings;
-  const redis = app?.redis?.getInstance ? app.redis.getInstance() : null;
-  const uniqueUuids = Array.from(
-    new Set(sessionUuids.filter((uuid) => typeof uuid === "string" && uuid.length > 0))
-  );
+  const app = c.var.app;
+  const settings = app.settings.probeServerSettings;
+  const redis = app.redis.getInstance();
+  const uniqueUuids = Array.from(new Set(sessionUuids));
 
   for (const uuid of uniqueUuids) {
     result.set(uuid, createEmptyProbeSnapshot());
   }
 
-  if (!settings?.enabled || !redis || uniqueUuids.length === 0) {
+  if (!settings.enabled || !redis || uniqueUuids.length === 0) {
     return result;
   }
 
-  const pipeline = redis.pipeline();
+  const keyTasks = [];
   uniqueUuids.forEach((uuid) => {
-    for (const family of PROBE_FAMILIES) {
-      pipeline.get(buildProbeRedisKey(uuid, family));
+    if (uuid) for (const family of PROBE_FAMILIES) {
+      keyTasks.push({ uuid, family, key: buildProbeRedisKey(uuid, family) });
     }
   });
 
-  let responses = [];
-  try {
-    responses = await pipeline.exec();
-  } catch (error) {
-    app.logger.getLogger("app").error(`Failed to load probe data: ${error}`);
-    return result;
+  const rawResults = new Map();
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < keyTasks.length; i += BATCH_SIZE) {
+    const batch = keyTasks.slice(i, i + BATCH_SIZE);
+    const batchPromises = batch.map((task) => redis.get(task.key));
+    const batchResponses = await Promise.allSettled(batchPromises);
+
+    batchResponses.forEach((response, index) => {
+      const task = batch[index];
+      if (response.status === "fulfilled" && response.value) {
+        rawResults.set(task.key, response.value);
+      } else if (response.status === "rejected") {
+        app.logger
+          .getLogger("app")
+          .error(`Failed to load probe data for ${task.key}: ${response.reason}`);
+      }
+    });
   }
 
   const now = Math.floor(Date.now() / 1000);
   const timeout = Number(settings.sessionHealthyTimeoutSec) || DEFAULT_PROBE_TIMEOUT_SEC;
 
-  for (let i = 0; i < responses.length; i += 1) {
-    const sessionIndex = Math.floor(i / PROBE_FAMILIES.length);
-    const familyIndex = i % PROBE_FAMILIES.length;
-    const uuid = uniqueUuids[sessionIndex];
+  keyTasks.forEach(({ uuid, family, key }) => {
     const snapshot = result.get(uuid);
-    if (!snapshot) continue;
-
-    const [error, value] = responses[i] || [];
-    if (error || !value) {
-      continue;
-    }
-
-    const parsed = safeJsonParse(value);
-    if (!parsed) {
-      continue;
-    }
-
-    snapshot[PROBE_FAMILIES[familyIndex]] = buildProbeFamilyState(parsed, now, timeout);
-  }
+    if (!snapshot) return;
+    const rawValue = rawResults.get(key);
+    if (!rawValue) return;
+    const parsed = safeJsonParse(rawValue);
+    if (!parsed) return;
+    snapshot[family] = buildProbeFamilyState(parsed, now, timeout);
+  });
 
   return result;
 };
