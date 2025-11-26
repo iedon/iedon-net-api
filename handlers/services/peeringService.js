@@ -8,6 +8,7 @@ import {
   bcryptGenHash,
   bcryptGenSalt,
 } from "../../common/helper.js";
+import { getProbeSnapshots, attachProbeSnapshots } from "./probeService.js";
 
 // Routing Policy
 // FULL 0:
@@ -244,6 +245,11 @@ export async function queryPeeringSession(c) {
   }
 
   data.data = session.data || "";
+  const probeSnapshots = await getProbeSnapshots(c, [sessionUuid]);
+  const probe = probeSnapshots.get(sessionUuid);
+  if (probe) {
+    data.probe = probe;
+  }
 
   return makeResponse(c, RESPONSE_CODE.OK, data);
 }
@@ -329,6 +335,8 @@ export async function enumPeeringSessions(c, enumAll = false) {
       }
       sessions.push(data);
     }
+
+    await attachProbeSnapshots(c, sessions, (session) => session.uuid);
   } catch (error) {
     c.var.app.logger.getLogger("app").error(error);
     return makeResponse(c, RESPONSE_CODE.SERVER_ERROR);

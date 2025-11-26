@@ -1,13 +1,14 @@
-import { bcryptCompare } from "../common/helper";
-import { makeResponse, RESPONSE_CODE } from "../common/packet";
+import { bcryptCompare } from "../common/helper.js";
+import { makeResponse, RESPONSE_CODE } from "../common/packet.js";
 import {
   deleteDbSession,
   modifyDbSessionStatus,
   PEERING_STATUS,
   requestAgentToSync,
   getRouterCbParams,
-  getBgpSession,
-} from "./services/peeringService";
+  getBgpSession
+} from "./services/peeringService.js";
+import { getProbeSnapshots } from "./services/probeService.js";
 
 async function verifyAgentApiKey(c, router) {
   const header = c.req.header("Authorization");
@@ -49,6 +50,8 @@ export default async function (c) {
       return await sessions(c, router);
     case "modify":
       return await modify(c);
+    case "probe":
+      return await probeSummary(c, router);
     default:
       return makeResponse(c, RESPONSE_CODE.NOT_FOUND);
   }
@@ -133,6 +136,32 @@ async function heartbeat(c, router) {
   );
 }
 
+async function probeSummary(c, router) {
+  try {
+    const rows = await c.var.app.models.bgpSessions.findAll({
+      attributes: ["uuid"],
+      where: { router },
+    });
+    const sessionUuids = rows.map((row) => row.dataValues.uuid).filter(Boolean);
+    const probeMap = await getProbeSnapshots(c, sessionUuids);
+    const probes = sessionUuids.map((uuid) => {
+      const snapshot = probeMap.get(uuid) || {
+        ipv4: { seen: false, healthy: null, nat: null },
+        ipv6: { seen: false, healthy: null, nat: null },
+      };
+      return {
+        uuid,
+        ipv4: snapshot.ipv4,
+        ipv6: snapshot.ipv6,
+      };
+    });
+    return makeResponse(c, RESPONSE_CODE.OK, probes);
+  } catch (error) {
+    c.var.app.logger.getLogger("app").error(error);
+    return makeResponse(c, RESPONSE_CODE.SERVER_ERROR);
+  }
+}
+
 async function modify(c) {
   const { status, session, lastError } = c.var.body;
   const sessionUuid = session;
@@ -159,8 +188,11 @@ async function modify(c) {
     }
 
     if (status === PEERING_STATUS.DELETED) {
-      await deleteDbSession(c, sessionUuid);
-      await c.var.app.redis.deleteData(`session:${sessionUuid}`);
+      await Promise.allSettled([
+        deleteDbSession(c, sessionUuid),
+        deleteProbeEntries(c, sessionUuid),
+        c.var.app.redis.deleteData(`session:${sessionUuid}`)
+      ]);;
     } else {
       await modifyDbSessionStatus(c, sessionUuid, status, lastError || null);
     }

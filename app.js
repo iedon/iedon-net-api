@@ -17,6 +17,7 @@ import { useDbContext } from './db/dbContext.js';
 import { useRedisContext } from './db/redisContext.js';
 import { useSshAuthServer } from './providers/ssh/sshAuthServer.js';
 import { useOpenAuth } from './providers/openAuth/openAuth.js';
+import { useProbeServer } from './providers/probeServer/probeServer.js';
 
 import { registerRoutes } from './routes.js';
 import { requestMiddleware } from './request.js';
@@ -56,6 +57,8 @@ registerRoutes(app);
       useSshAuthServer(app, app.settings.sshAuthServerSettings),
       useOpenAuth(app, app.settings.openAuthSettings)
     ]);
+
+    await useProbeServer(app, app.settings.probeServerSettings);
 
     app.ready = true;
   } catch (error) {

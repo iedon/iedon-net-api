@@ -297,6 +297,18 @@ export default {
     }
   },
 
+  probeServerSettings: {
+    enabled: true,
+    sessionHealthyTimeoutSec: 300, // 5min, if no data received in this time, session is considered unhealthy
+    bindUdpPort: 2189,
+    bindAddress4: '0.0.0.0',
+    bindAddress6: '::',
+    encryptionKey: '___DEMO__PROBE_32_PACKET__KEY___',
+    expectedBanner: 'iEdon-Net PeerAPI Peering Prober',
+    maxPacketLength: 512,
+    timestampToleranceSec: 120, // Anti replay tolerance for packet timestamp
+  },
+
   // Configure CORS, preflight headers and custom headers here
   preflightHeaders: {
     'Access-Control-Request-Method': 'POST',
