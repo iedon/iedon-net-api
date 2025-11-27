@@ -8,7 +8,7 @@ import {
   getRouterCbParams,
   getBgpSession
 } from "./services/peeringService.js";
-import { getProbeSnapshots } from "./services/probeService.js";
+import { createEmptyProbeSnapshot, getProbeSnapshots } from "./services/probeService.js";
 
 async function verifyAgentApiKey(c, router) {
   const header = c.req.header("Authorization");
@@ -145,10 +145,7 @@ async function probeSummary(c, router) {
     const sessionUuids = rows.map((row) => row.dataValues.uuid).filter(Boolean);
     const probeMap = await getProbeSnapshots(c, sessionUuids);
     const probes = sessionUuids.map((uuid) => {
-      const snapshot = probeMap.get(uuid) || {
-        ipv4: { seen: false, healthy: null, nat: null },
-        ipv6: { seen: false, healthy: null, nat: null },
-      };
+      const snapshot = probeMap.get(uuid) || createEmptyProbeSnapshot();
       return {
         uuid,
         ipv4: snapshot.ipv4,

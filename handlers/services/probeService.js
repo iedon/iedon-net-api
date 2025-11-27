@@ -6,6 +6,14 @@ import {
 } from "../../common/probe.js";
 
 const DEFAULT_PROBE_TIMEOUT_SEC = 300;
+const BATCH_SIZE = 50;
+
+// Health status enum
+export const PROBE_HEALTH_STATUS = {
+  HEALTHY: 0,
+  UNHEALTHY: 1,
+  NA: 2,
+};
 
 export const getProbeSnapshots = async (c, sessionUuids = []) => {
   const result = new Map();
@@ -28,13 +36,13 @@ export const getProbeSnapshots = async (c, sessionUuids = []) => {
 
   const keyTasks = [];
   uniqueUuids.forEach((uuid) => {
-    if (uuid) for (const family of PROBE_FAMILIES) {
-      keyTasks.push({ uuid, family, key: buildProbeRedisKey(uuid, family) });
-    }
+    if (uuid)
+      for (const family of PROBE_FAMILIES) {
+        keyTasks.push({ uuid, family, key: buildProbeRedisKey(uuid, family) });
+      }
   });
 
   const rawResults = new Map();
-  const BATCH_SIZE = 50;
   for (let i = 0; i < keyTasks.length; i += BATCH_SIZE) {
     const batch = keyTasks.slice(i, i + BATCH_SIZE);
     const batchPromises = batch.map((task) => redis.get(task.key));
@@ -47,29 +55,77 @@ export const getProbeSnapshots = async (c, sessionUuids = []) => {
       } else if (response.status === "rejected") {
         app.logger
           .getLogger("app")
-          .error(`Failed to load probe data for ${task.key}: ${response.reason}`);
+          .error(
+            `Failed to load probe data for ${task.key}: ${response.reason}`
+          );
       }
     });
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const timeout = Number(settings.sessionHealthyTimeoutSec) || DEFAULT_PROBE_TIMEOUT_SEC;
+  const timeout =
+    Number(settings.sessionHealthyTimeoutSec) || DEFAULT_PROBE_TIMEOUT_SEC;
 
-  keyTasks.forEach(({ uuid, family, key }) => {
-    const snapshot = result.get(uuid);
-    if (!snapshot) return;
-    const rawValue = rawResults.get(key);
-    if (!rawValue) return;
-    const parsed = safeJsonParse(rawValue);
-    if (!parsed) return;
-    snapshot[family] = buildProbeFamilyState(parsed, now, timeout);
-  });
+  // Build probe family states in batches (now async)
+  for (let i = 0; i < keyTasks.length; i += BATCH_SIZE) {
+    const batch = keyTasks.slice(i, i + BATCH_SIZE);
+    const batchPromises = batch.map(async ({ uuid, family, key }) => {
+      const snapshot = result.get(uuid);
+      if (!snapshot) return { status: "skipped", uuid, reason: "no_snapshot" };
+      const rawValue = rawResults.get(key);
+      if (!rawValue) return { status: "skipped", uuid, reason: "no_raw_value" };
+      let parsed = null;
+      try {
+        parsed = JSON.parse(rawValue);
+      } catch {
+        parsed = null;
+      }
+      if (!parsed) return { status: "skipped", uuid, reason: "parse_failed" };
+
+      try {
+        snapshot[family] = await buildProbeFamilyState(
+          parsed,
+          now,
+          timeout,
+          redis,
+          uuid,
+          family
+        );
+        return { status: "fulfilled", uuid, family };
+      } catch (error) {
+        return { status: "rejected", uuid, family, error };
+      }
+    });
+
+    const batchResponses = await Promise.allSettled(batchPromises);
+
+    batchResponses.forEach((response, index) => {
+      const task = batch[index];
+      if (response.status === "rejected") {
+        app.logger
+          .getLogger("app")
+          .error(
+            `Failed to build probe state for ${task.uuid}:${task.family}: ${response.reason}`
+          );
+      } else if (response.value?.status === "rejected") {
+        app.logger
+          .getLogger("app")
+          .error(
+            `Error building probe state for ${response.value.uuid}:${response.value.family}: ${response.value.error}`
+          );
+      }
+    });
+  }
 
   return result;
 };
 
 export const attachProbeSnapshots = async (c, collection, selector) => {
-  if (!Array.isArray(collection) || collection.length === 0 || typeof selector !== "function") {
+  if (
+    !Array.isArray(collection) ||
+    collection.length === 0 ||
+    typeof selector !== "function"
+  ) {
     return;
   }
   const uuids = collection
@@ -89,19 +145,23 @@ export const attachProbeSnapshots = async (c, collection, selector) => {
 
 export const deleteProbeEntries = async (c, sessionUuid) => {
   if (!sessionUuid) return;
-  const redis = c?.var?.app?.redis?.getInstance ? c.var.app.redis.getInstance() : null;
+  const redis = c?.var?.app?.redis?.getInstance
+    ? c.var.app.redis.getInstance()
+    : null;
   if (!redis) {
     return;
   }
   try {
-    await redis.del(
+    await Promise.all([
       buildProbeRedisKey(sessionUuid, PROBE_FAMILY_IPV4),
-      buildProbeRedisKey(sessionUuid, PROBE_FAMILY_IPV6)
-    );
+      buildProbeRedisKey(sessionUuid, PROBE_FAMILY_IPV6),
+    ]);
   } catch (error) {
     c.var.app.logger
       .getLogger("app")
-      .warn(`Failed to delete probe data for session ${sessionUuid}: ${error.message}`);
+      .warn(
+        `Failed to delete probe data for session ${sessionUuid}: ${error.message}`
+      );
   }
 };
 
@@ -114,29 +174,84 @@ export function createEmptyProbeSnapshot() {
 
 function createEmptyProbeFamilyState() {
   return {
-    seen: false,
-    healthy: null,
+    timestamp: null,
+    status: null,
     nat: null,
   };
 }
 
-function buildProbeFamilyState(record, now, timeout) {
+async function buildProbeFamilyState(
+  record,
+  now,
+  timeout,
+  redis,
+  sessionUuid,
+  family
+) {
   if (!record) {
     return createEmptyProbeFamilyState();
   }
   const timestamp = Number(record.timestamp) || 0;
-  const healthy = timestamp > 0 ? now - timestamp <= timeout : false;
+  const isHealthyByTimestamp =
+    timestamp > 0 ? now - timestamp <= timeout : false;
+
+  let healthStatus = isHealthyByTimestamp
+    ? PROBE_HEALTH_STATUS.HEALTHY
+    : PROBE_HEALTH_STATUS.UNHEALTHY;
+
+  // If unhealthy by timestamp, check BGP state from Redis
+  if (!isHealthyByTimestamp) {
+    try {
+      const sessionKey = `session:${sessionUuid}`;
+      const rawSessionData = await redis.get(sessionKey);
+
+      if (rawSessionData) {
+        let sessionData = null;
+        try {
+          sessionData = JSON.parse(rawSessionData);
+        } catch {
+          sessionData = null;
+        }
+
+        if (sessionData && Array.isArray(sessionData.bgp)) {
+          // Determine which BGP types to check based on family
+          // For ipv4: check "ipv4" or "mpbgp"
+          // For ipv6: check "ipv6" or "mpbgp"
+          // mpbgp is treated as both ipv4+ipv6
+          const relevantBgpTypes =
+            family === "ipv4" ? ["ipv4", "mpbgp"] : ["ipv6", "mpbgp"];
+
+          // Check if any relevant BGP sessions exist and their state
+          const relevantBgpSessions = sessionData.bgp.filter((bgp) =>
+            relevantBgpTypes.includes(bgp.type)
+          );
+
+          // If we found relevant BGP sessions and ALL of them are down, mark as N/A
+          if (relevantBgpSessions.length > 0) {
+            const allDown = relevantBgpSessions.every(
+              (bgp) =>
+                bgp.state !== undefined &&
+                bgp.state !== null &&
+                typeof bgp.state === "string" &&
+                bgp.state.toLowerCase() !== "up" &&
+                bgp.state.toLowerCase() !== "established"
+            );
+
+            if (allDown) {
+              healthStatus = PROBE_HEALTH_STATUS.NA;
+            }
+          }
+        }
+      }
+    } catch {
+      // If Redis fetch fails, keep the UNHEALTHY status
+      // Don't log here to avoid spam, caller can handle logging if needed
+    }
+  }
+
   return {
-    seen: true,
-    healthy,
+    timestamp,
+    status: healthStatus,
     nat: Boolean(record.nat),
   };
-}
-
-function safeJsonParse(raw) {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
 }
