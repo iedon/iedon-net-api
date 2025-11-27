@@ -214,6 +214,10 @@ async function buildProbeFamilyState(
           if (allDown) {
             healthStatus = PROBE_HEALTH_STATUS.NA;
           }
+        } else {
+          // No relevant BGP sessions found, mark as N/A
+          // This can happen if the session has no BGP configured for this family(eg. single channel)
+          healthStatus = PROBE_HEALTH_STATUS.NA;
         }
       }
     } catch {
