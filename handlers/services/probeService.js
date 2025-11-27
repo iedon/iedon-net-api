@@ -23,7 +23,7 @@ export const getProbeSnapshots = async (c, sessionUuids = []) => {
 
   const app = c.var.app;
   const settings = app.settings.probeServerSettings;
-  const redis = app.redis.getInstance();
+  const redis = app.redis;
   const uniqueUuids = Array.from(new Set(sessionUuids));
 
   for (const uuid of uniqueUuids) {
@@ -45,7 +45,7 @@ export const getProbeSnapshots = async (c, sessionUuids = []) => {
   const rawResults = new Map();
   for (let i = 0; i < keyTasks.length; i += BATCH_SIZE) {
     const batch = keyTasks.slice(i, i + BATCH_SIZE);
-    const batchPromises = batch.map((task) => redis.get(task.key));
+    const batchPromises = batch.map((task) => redis.getData(task.key));
     const batchResponses = await Promise.allSettled(batchPromises);
 
     batchResponses.forEach((response, index) => {
@@ -74,17 +74,10 @@ export const getProbeSnapshots = async (c, sessionUuids = []) => {
       if (!snapshot) return { status: "skipped", uuid, reason: "no_snapshot" };
       const rawValue = rawResults.get(key);
       if (!rawValue) return { status: "skipped", uuid, reason: "no_raw_value" };
-      let parsed = null;
-      try {
-        parsed = JSON.parse(rawValue);
-      } catch {
-        parsed = null;
-      }
-      if (!parsed) return { status: "skipped", uuid, reason: "parse_failed" };
 
       try {
         snapshot[family] = await buildProbeFamilyState(
-          parsed,
+          rawValue,
           now,
           timeout,
           redis,
@@ -144,17 +137,11 @@ export const attachProbeSnapshots = async (c, collection, selector) => {
 };
 
 export const deleteProbeEntries = async (c, sessionUuid) => {
-  if (!sessionUuid) return;
-  const redis = c?.var?.app?.redis?.getInstance
-    ? c.var.app.redis.getInstance()
-    : null;
-  if (!redis) {
-    return;
-  }
+  const redis = c.var.app.redis;
   try {
     await Promise.all([
-      buildProbeRedisKey(sessionUuid, PROBE_FAMILY_IPV4),
-      buildProbeRedisKey(sessionUuid, PROBE_FAMILY_IPV6),
+      redis.deleteData(buildProbeRedisKey(sessionUuid, PROBE_FAMILY_IPV4)),
+      redis.deleteData(buildProbeRedisKey(sessionUuid, PROBE_FAMILY_IPV6)),
     ]);
   } catch (error) {
     c.var.app.logger
@@ -203,43 +190,33 @@ async function buildProbeFamilyState(
   if (!isHealthyByTimestamp) {
     try {
       const sessionKey = `session:${sessionUuid}`;
-      const rawSessionData = await redis.get(sessionKey);
+      const sessionData = await redis.getData(sessionKey);
+      if (sessionData && Array.isArray(sessionData.bgp)) {
+        // Determine which BGP types to check based on family
+        // For ipv4: check "ipv4" or "mpbgp"
+        // For ipv6: check "ipv6" or "mpbgp"
+        // mpbgp is treated as both ipv4+ipv6
+        const relevantBgpTypes =
+          family === "ipv4" ? ["ipv4", "mpbgp"] : ["ipv6", "mpbgp"];
 
-      if (rawSessionData) {
-        let sessionData = null;
-        try {
-          sessionData = JSON.parse(rawSessionData);
-        } catch {
-          sessionData = null;
-        }
+        // Check if any relevant BGP sessions exist and their state
+        const relevantBgpSessions = sessionData.bgp.filter((bgp) =>
+          relevantBgpTypes.includes(bgp.type)
+        );
 
-        if (sessionData && Array.isArray(sessionData.bgp)) {
-          // Determine which BGP types to check based on family
-          // For ipv4: check "ipv4" or "mpbgp"
-          // For ipv6: check "ipv6" or "mpbgp"
-          // mpbgp is treated as both ipv4+ipv6
-          const relevantBgpTypes =
-            family === "ipv4" ? ["ipv4", "mpbgp"] : ["ipv6", "mpbgp"];
-
-          // Check if any relevant BGP sessions exist and their state
-          const relevantBgpSessions = sessionData.bgp.filter((bgp) =>
-            relevantBgpTypes.includes(bgp.type)
+        // If we found relevant BGP sessions and ALL of them are down, mark as N/A
+        if (relevantBgpSessions.length > 0) {
+          const allDown = relevantBgpSessions.every(
+            (bgp) =>
+              bgp.state !== undefined &&
+              bgp.state !== null &&
+              typeof bgp.state === "string" &&
+              bgp.state.toLowerCase() !== "up" &&
+              bgp.state.toLowerCase() !== "established"
           );
 
-          // If we found relevant BGP sessions and ALL of them are down, mark as N/A
-          if (relevantBgpSessions.length > 0) {
-            const allDown = relevantBgpSessions.every(
-              (bgp) =>
-                bgp.state !== undefined &&
-                bgp.state !== null &&
-                typeof bgp.state === "string" &&
-                bgp.state.toLowerCase() !== "up" &&
-                bgp.state.toLowerCase() !== "established"
-            );
-
-            if (allDown) {
-              healthStatus = PROBE_HEALTH_STATUS.NA;
-            }
+          if (allDown) {
+            healthStatus = PROBE_HEALTH_STATUS.NA;
           }
         }
       }

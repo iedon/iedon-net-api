@@ -8,7 +8,7 @@ import {
   getRouterCbParams,
   getBgpSession
 } from "./services/peeringService.js";
-import { createEmptyProbeSnapshot, getProbeSnapshots } from "./services/probeService.js";
+import { createEmptyProbeSnapshot, getProbeSnapshots, deleteProbeEntries } from "./services/probeService.js";
 
 async function verifyAgentApiKey(c, router) {
   const header = c.req.header("Authorization");
