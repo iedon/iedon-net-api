@@ -1,4 +1,4 @@
-import { DefaultOpenAuthProvider } from "./defaultOpenAuthProvider";
+import { DefaultOpenAuthProvider } from "./defaultOpenAuthProvider.js";
 import { readFile } from "fs";
 import { createVerify } from "crypto";
 

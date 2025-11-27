@@ -1,4 +1,4 @@
-import whois from 'whois';
+import { lookup as whoisLookup } from 'whois';
 
 export class DefaultWhoisProvider {
   constructor(app, whoisSettings) {
@@ -6,7 +6,7 @@ export class DefaultWhoisProvider {
     this.whoisSettings = whoisSettings;
     this.logger = this.app.logger.getLogger('whois');
     this._lookup = (name, settings) => new Promise((resolve, reject) =>
-      whois.lookup(name, settings, (error, data) => {
+      whoisLookup(name, settings, (error, data) => {
         if (error) {
           reject(error);
           return;
