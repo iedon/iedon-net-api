@@ -72,12 +72,9 @@ export const getProbeSnapshots = async (c, sessionUuids = []) => {
     const batchPromises = batch.map(async ({ uuid, family, key }) => {
       const snapshot = result.get(uuid);
       if (!snapshot) return { status: "skipped", uuid, reason: "no_snapshot" };
-      const rawValue = rawResults.get(key);
-      if (!rawValue) return { status: "skipped", uuid, reason: "no_raw_value" };
-
       try {
         snapshot[family] = await buildProbeFamilyState(
-          rawValue,
+          rawResults.get(key),
           now,
           timeout,
           redis,
@@ -159,12 +156,10 @@ export function createEmptyProbeSnapshot() {
   };
 }
 
-// Creates an empty probe family state if not seen in Redis,
-// which means not tested yet or no probe packet received(unhealthy)
 function createEmptyProbeFamilyState() {
   return {
     timestamp: null,
-    status: PROBE_HEALTH_STATUS.UNHEALTHY,
+    status: PROBE_HEALTH_STATUS.NA,
     nat: null,
   };
 }
@@ -177,10 +172,8 @@ async function buildProbeFamilyState(
   sessionUuid,
   family
 ) {
-  if (!record) {
-    return createEmptyProbeFamilyState();
-  }
-  const timestamp = Number(record.timestamp) || 0;
+
+  const timestamp = record ? (Number(record.timestamp) || 0) : 0;
   const isHealthyByTimestamp =
     timestamp > 0 ? now - timestamp <= timeout : false;
 
@@ -194,6 +187,7 @@ async function buildProbeFamilyState(
       const sessionKey = `session:${sessionUuid}`;
       const sessionData = await redis.getData(sessionKey);
       if (sessionData && Array.isArray(sessionData.bgp)) {
+        // sessionData.bgp can be ipv4, ipv6, ipv4 & ipv6 or mpbgp
         // Determine which BGP types to check based on family
         // For ipv4: check "ipv4" or "mpbgp"
         // For ipv6: check "ipv6" or "mpbgp"
@@ -229,8 +223,8 @@ async function buildProbeFamilyState(
   }
 
   return {
-    timestamp,
+    timestamp: timestamp > 0 ? timestamp : null,
     status: healthStatus,
-    nat: Boolean(record.nat),
+    nat: Boolean(record && record.nat),
   };
 }
