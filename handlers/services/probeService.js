@@ -66,7 +66,7 @@ export const getProbeSnapshots = async (c, sessionUuids = []) => {
   const timeout =
     Number(settings.sessionHealthyTimeoutSec) || DEFAULT_PROBE_TIMEOUT_SEC;
 
-  // Build probe family states in batches (now async)
+  // Build probe family states in batches
   for (let i = 0; i < keyTasks.length; i += BATCH_SIZE) {
     const batch = keyTasks.slice(i, i + BATCH_SIZE);
     const batchPromises = batch.map(async ({ uuid, family, key }) => {
@@ -159,10 +159,12 @@ export function createEmptyProbeSnapshot() {
   };
 }
 
+// Creates an empty probe family state if not seen in Redis,
+// which means not tested yet or no probe packet received(unhealthy)
 function createEmptyProbeFamilyState() {
   return {
     timestamp: null,
-    status: null,
+    status: PROBE_HEALTH_STATUS.UNHEALTHY,
     nat: null,
   };
 }
