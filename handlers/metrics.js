@@ -1,4 +1,9 @@
 import { makeResponse, RESPONSE_CODE } from "../common/packet.js";
+import {
+  createEmptyProbeSnapshot,
+  getProbeSnapshots,
+  PROBE_HEALTH_STATUS,
+} from "./services/probeService.js";
 
 const METRIC_DEFINITIONS = [
   {
@@ -40,6 +45,21 @@ const METRIC_DEFINITIONS = [
     name: "peerapi_bgp_routes_current_total",
     type: "gauge",
     help: "Current BGP route counters grouped by direction and address family.",
+  },
+  {
+    name: "peerapi_session_probe_timestamp_seconds",
+    type: "gauge",
+    help: "Unix timestamp of the last probe sample per session and address family.",
+  },
+  {
+    name: "peerapi_session_probe_status",
+    type: "gauge",
+    help: "Probe health status per session/family (0=healthy,1=unhealthy,2=not-applicable).",
+  },
+  {
+    name: "peerapi_session_probe_nat",
+    type: "gauge",
+    help: "Whether NAT was detected for probe packets (1=yes, 0=no).",
   },
 ];
 
@@ -112,6 +132,7 @@ export default async function metricsHandler(c) {
     }
 
     const sessions = [];
+    const sessionUuidSet = new Set();
     const BATCH_SIZE = 50;
     for (let i = 0; i < sessionKeys.length; i += BATCH_SIZE) {
       const batchKeys = sessionKeys.slice(i, i + BATCH_SIZE);
@@ -125,6 +146,9 @@ export default async function metricsHandler(c) {
           const value = result.value;
           if (value && typeof value === "object") {
             sessions.push(value);
+            if (typeof value.uuid === "string" && value.uuid.length > 0) {
+              sessionUuidSet.add(value.uuid);
+            }
           }
         } else {
           app.logger
@@ -136,7 +160,21 @@ export default async function metricsHandler(c) {
       });
     }
 
-    return respondWithMetrics(c, sessions);
+    let probeSnapshots = new Map();
+    if (sessionUuidSet.size > 0) {
+      try {
+        probeSnapshots = await getProbeSnapshots(
+          c,
+          Array.from(sessionUuidSet)
+        );
+      } catch (error) {
+        app.logger
+          ?.getLogger("app")
+          .warn(`Failed to load probe snapshots for metrics: ${error}`);
+      }
+    }
+
+    return respondWithMetrics(c, sessions, probeSnapshots);
   } catch (error) {
     app.logger
       ?.getLogger("app")
@@ -175,7 +213,7 @@ async function collectSessionKeys(c, redis) {
   return keys;
 }
 
-function respondWithMetrics(c, sessions) {
+function respondWithMetrics(c, sessions, probeSnapshots = new Map()) {
   const lines = [];
 
   for (const definition of METRIC_DEFINITIONS) {
@@ -194,6 +232,8 @@ function respondWithMetrics(c, sessions) {
     addInterfaceMetrics(lines, baseLabels, session?.interface);
     addRttMetrics(lines, baseLabels, session?.rtt);
     addBgpMetrics(lines, baseLabels, session?.bgp);
+    const probeSnapshot = probeSnapshots.get(session?.uuid) || createEmptyProbeSnapshot();
+    addProbeMetrics(lines, baseLabels, probeSnapshot);
   });
 
   const payload = `${lines.join("\n")}\n`;
@@ -320,6 +360,50 @@ function addBgpMetrics(lines, baseLabels, bgpEntries) {
         );
       }
     });
+  });
+}
+
+function addProbeMetrics(lines, baseLabels, probeSnapshot) {
+  if (!probeSnapshot || typeof probeSnapshot !== "object") return;
+
+  const families = [
+    ["ipv4", probeSnapshot.ipv4],
+    ["ipv6", probeSnapshot.ipv6],
+  ];
+
+  families.forEach(([family, state]) => {
+    const familyLabels = {
+      ...baseLabels,
+      family,
+    };
+
+    const timestamp = Number(state?.timestamp);
+    if (Number.isFinite(timestamp) && timestamp > 0) {
+      pushSample(
+        lines,
+        "peerapi_session_probe_timestamp_seconds",
+        familyLabels,
+        timestamp
+      );
+    }
+
+    if (state && typeof state.status === "number") {
+      pushSample(
+        lines,
+        "peerapi_session_probe_status",
+        familyLabels,
+        state.status
+      );
+    }
+
+    if (typeof state?.nat === "boolean") {
+      pushSample(
+        lines,
+        "peerapi_session_probe_nat",
+        familyLabels,
+        state.nat ? 1 : 0
+      );
+    }
   });
 }
 

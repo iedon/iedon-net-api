@@ -219,6 +219,9 @@ async function buildProbeFamilyState(
           // This can happen if the session has no BGP configured for this family(eg. single channel)
           healthStatus = PROBE_HEALTH_STATUS.NA;
         }
+      } else {
+        // No BGP data found, mark as N/A
+        healthStatus = PROBE_HEALTH_STATUS.NA;
       }
     } catch {
       // If Redis fetch fails, keep the UNHEALTHY status
@@ -229,6 +232,6 @@ async function buildProbeFamilyState(
   return {
     timestamp: timestamp > 0 ? timestamp : null,
     status: healthStatus,
-    nat: Boolean(record && record.nat),
+    nat: healthStatus === PROBE_HEALTH_STATUS.HEALTHY && record && record.nat,
   };
 }
